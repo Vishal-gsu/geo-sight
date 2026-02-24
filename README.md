@@ -1,85 +1,91 @@
-# 🛰️ GeoSight — Multi-Layer Satellite Image Analysis
-### Google Earth Engine · SAM · Sentinel-2 · Multi-City Land Cover Change Detection
+# GeoSight — Multi-Layer Satellite Image Analysis
+### Google Earth Engine, SAM, Sentinel-2, Multi-City Land Cover Change Detection
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python)
 ![GEE](https://img.shields.io/badge/Google_Earth_Engine-Free_Tier-4285F4?style=flat-square&logo=google)
 ![SAM2](https://img.shields.io/badge/SAM-Meta_AI-0064E0?style=flat-square)
 ![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B?style=flat-square&logo=streamlit)
-![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
-An end-to-end geospatial image analysis pipeline combining **Google Earth Engine (Sentinel-2 L2A)** with **Meta's SAM (Segment Anything Model) via samgeo** for zero-shot land cover segmentation and multi-temporal change detection — now with an interactive **Streamlit dashboard** for 6 Indian cities.
+An end-to-end geospatial image analysis pipeline combining Google Earth Engine (Sentinel-2 L2A) with Meta's SAM (Segment Anything Model) via samgeo for zero-shot land cover segmentation and multi-temporal change detection — now with an interactive Streamlit dashboard for 6 Indian cities.
 
 > **Note on AlphaEarth Foundations:** This project is architected to integrate Google DeepMind's AlphaEarth embedding model the moment the public GEE dataset becomes available for academic accounts. `src/embeddings.py` already contains the integration pattern.
 
 ---
 
-## 🖥️ Streamlit Dashboard
+## Streamlit Dashboard
 
 A fully interactive, multi-page dashboard — no command-line knowledge required:
 
+![Streamlit Dashboard](assets/demo_output.png)
+
 | Page | What it does |
 |:---|:---|
-| 🏠 Home | Project overview + GEE connection status |
-| 📊 Change Detection | Select any city + two years → live NDVI/NDWI/NDBI change map with stats |
-| 🗺️ Interactive Map | Load-on-demand GEE satellite map with 6 layer overlays (all unchecked by default) |
-| 🤖 SAM Segmentation | One-click tile download → background SAM segmentation → auto-expand results |
-| 📁 Results Gallery | Browse all generated outputs |
+| Home | Project overview and GEE connection status |
+| Change Detection | Select any city and two years to see live NDVI/NDWI/NDBI change map with stats |
+| Interactive Map | Load-on-demand GEE satellite map with 6 layer overlays |
+| SAM Segmentation | One-click tile download, background SAM segmentation, auto-expand results |
+| Results Gallery | Browse all generated outputs |
 
+To run the dashboard:
 ```bash
-# Run the dashboard
 streamlit run app.py
 ```
 
 ---
 
-## 📊 Real Results — Bengaluru & Delhi
+## Real Results — Bengaluru & Delhi
 
-### Change Detection (Sentinel-2 Multispectral — Accurate)
+### Change Detection (Sentinel-2 Multispectral)
+
+![Change Detection](assets/bangalore_change_detection.png)
 
 | City | Metric | 2019 | 2024 | Change |
 |:---|:---:|:---:|:---:|:---:|
-| **Bengaluru** | Mean NDVI | 0.2598 | 0.2507 | **−0.0091** ⚠️ |
-| **Bengaluru** | Mean NDBI | 0.0513 | 0.0514 | **+0.0001** 🏙️ |
+| **Bengaluru** | Mean NDVI | 0.2598 | 0.2507 | **−0.0091** |
+| **Bengaluru** | Mean NDBI | 0.0513 | 0.0514 | **+0.0001** |
 
 > **Finding:** Consistent vegetation decline consistent with Bengaluru's IT corridor expansion (−3.5% relative NDVI, in line with IISc published data for 2019–2024).
 
-### SAM Segmentation (RGB-proxy — limited by no NIR)
+### SAM Segmentation (RGB-proxy)
+
+![SAM Segmentation Summary](assets/bangalore_sam2_summary.png)
 
 | City | Water | Urban | Vegetation | Unknown* |
 |:---|:---:|:---:|:---:|:---:|
-| Bengaluru | 3.98% ✅ | 1.20% ✅ | 0.00% ⚠️ | 94.38% |
-| Delhi | 4.33% ✅ | 2.78% ✅ | 0.00% ⚠️ | 92.89% |
+| Bengaluru | 3.98% | 1.20% | 0.00% | 94.38% |
+| Delhi | 4.33% | 2.78% | 0.00% | 92.89% |
 
-> ⚠️ **Known limitation:** Vegetation classification requires NIR (Band 8). The standalone SAM segmentation uses RGB-only input — without NIR, V-NDVI proxies cannot separate vegetation from bare soil. The change detection module is unaffected (it uses real GEE multispectral data). See `#accuracy` for production fix.
+> **Known limitation:** Vegetation classification requires NIR (Band 8). The standalone SAM segmentation uses RGB-only input — without NIR, V-NDVI proxies cannot separate vegetation from bare soil. The change detection module is unaffected (it uses real GEE multispectral data). See `#accuracy` for production fix.
 
 ---
 
-## 🗂️ Project Structure
+## Project Structure
 
 ```
 geosight/
 ├── app.py                         # Streamlit multi-page dashboard
 ├── src/
-│   ├── preprocess.py              # Band selection · cloud masking · UTM reproject
-│   ├── spectral.py                # NDVI · NDWI · NDBI band math
-│   ├── segmentation.py            # SAM auto-segmentation + spectral class labelling
+│   ├── preprocess.py              # Band selection, cloud masking, UTM reproject
+│   ├── spectral.py                # NDVI, NDWI, NDBI band math
+│   ├── segmentation.py            # SAM auto-segmentation and spectral class labelling
 │   ├── change_detect.py           # Multi-temporal difference analysis
 │   ├── embeddings.py              # Google Earth Engine / AlphaEarth API
-│   └── report.py                  # Dark-mode matplotlib · Folium maps · area stats
+│   └── report.py                  # Dark-mode matplotlib, Folium maps, area stats
 ├── bangalore_change_detection.py  # Real GEE change detection pipeline
 ├── download_tile.py               # City-aware GEE satellite tile downloader
-├── sam2_segmentation.py           # SAM zero-shot segmentation (city-aware output)
+├── sam2_segmentation.py           # SAM zero-shot segmentation
 ├── notebooks/
 │   └── geosight_demo.ipynb        # Interactive walkthrough
 ├── data/                          # Downloaded satellite patches (gitignored)
-├── results/                       # Generated maps, PNGs, HTML, JSON stats
+├── results/                       # Generated outputs (gitignored)
+├── assets/                        # Images used in documentation
 ├── .env.example                   # Environment variable template
 └── requirements.txt
 ```
 
 ---
 
-## 🚀 One-Click Setup (Windows)
+## One-Click Setup (Windows)
 
 ```powershell
 git clone https://github.com/Vishal-gsu/geo-sight
@@ -112,7 +118,7 @@ streamlit run app.py
 
 ---
 
-## 🔬 Pipeline
+## Pipeline
 
 ```
 Sentinel-2 L2A (13 bands, 10m resolution)
@@ -125,9 +131,9 @@ Sentinel-2 L2A (13 bands, 10m resolution)
          │
          ▼
  Spectral Indices (spectral.py)
- ├── NDVI = (NIR–Red)/(NIR+Red)   → Vegetation health
- ├── NDWI = (Green–NIR)/(Green+NIR) → Water bodies
- └── NDBI = (SWIR–NIR)/(SWIR+NIR)  → Urban built-up
+ ├── NDVI = (NIR–Red)/(NIR+Red)   -> Vegetation health
+ ├── NDWI = (Green–NIR)/(Green+NIR) -> Water bodies
+ └── NDBI = (SWIR–NIR)/(SWIR+NIR)  -> Urban built-up
          │
          ├──────────────────────────┐
          ▼                          ▼
@@ -147,7 +153,7 @@ Sentinel-2 L2A (13 bands, 10m resolution)
 
 ---
 
-## ⚡ CLI Commands
+## CLI Commands
 
 ```bash
 # Test Earth Engine connection
@@ -171,7 +177,7 @@ streamlit run app.py
 
 ---
 
-## 🔑 Environment Setup
+## Environment Setup
 
 ```env
 EE_PROJECT_ID=your-gee-project-id
@@ -180,7 +186,7 @@ Get a GEE project at [earthengine.google.com](https://earthengine.google.com).
 
 ---
 
-## 📚 Tech Stack
+## Tech Stack
 
 | Category | Libraries |
 |:---|:---|
@@ -190,11 +196,11 @@ Get a GEE project at [earthengine.google.com](https://earthengine.google.com).
 | **Image Processing** | `numpy`, `opencv-python`, `scikit-image` |
 | **Visualization** | `matplotlib`, `folium`, `streamlit`, `streamlit-folium` |
 | **Configuration** | `python-dotenv` |
-| **Cities Supported** | Bengaluru · Mumbai · Delhi · Chennai · Hyderabad · Pune |
+| **Cities Supported** | Bengaluru, Mumbai, Delhi, Chennai, Hyderabad, Pune |
 
 ---
 
-## 🎯 JD Alignment (KaleidEO / SatSure)
+## JD Alignment (KaleidEO / SatSure)
 
 | JD Requirement | Implementation |
 |:---|:---|
@@ -209,7 +215,7 @@ Get a GEE project at [earthengine.google.com](https://earthengine.google.com).
 
 ---
 
-## 🔬 Accuracy Notes {#accuracy}
+## Accuracy Notes {#accuracy}
 
 **Change detection is accurate:** Uses real Sentinel-2 multispectral data with true NIR bands.
 
@@ -224,8 +230,3 @@ Get a GEE project at [earthengine.google.com](https://earthengine.google.com).
 - Bengaluru NDVI (0.25) matches published literature (IISc, 0.20–0.35 for urban fringe)
 - NDVI decline (−0.009 / 5yr) consistent with Bengaluru urban expansion studies
 - Water area (3.98%) plausible given Bengaluru's lake coverage in the analysed patch
-
----
-
-*Built targeting Earth Observation and Remote Sensing roles.
-CMR Institute of Technology · Google Earth Engine Non-Commercial Academic License*
