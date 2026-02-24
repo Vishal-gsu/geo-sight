@@ -432,7 +432,7 @@ elif page == "🤖 SAM Segmentation":
         st.caption("Downloads a 2048×2048 RGB patch directly from GEE (~30 sec)")
 
         if st.button("📥 Download Tile", use_container_width=True,
-                     disabled=st.session_state.sam_status in ("downloading","running")):
+                     disabled=st.session_state._sam_proc_status in ("downloading","running")):
             st.session_state._sam_proc_status = "downloading"
             st.session_state._sam_proc_city   = city_key
 
