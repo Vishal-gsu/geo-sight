@@ -17,7 +17,7 @@
             <meta name="viewport" content="width=device-width,
                 initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
             <style>
-                #map_541e57abd1ed0b3d8519078f7a93c0d7 {
+                #map_e8cf6dd1a2bb2e94ec3b71da668934ba {
                     position: relative;
                     width: 100.0%;
                     height: 100.0%;
@@ -54,24 +54,176 @@
 <body>
     
     
-<div style="position:fixed;top:10px;left:60px;z-index:9999;background:#111;
-            color:white;padding:10px 16px;border-radius:8px;font-size:13px;
-            border:1px solid #444;max-width:280px">
-  <b>🛰️ GeoSight — Bengaluru</b><br>
-  <span style="color:#aaa;font-size:11px">Sentinel-2 · 2019 vs 2024</span><br><br>
-  Toggle layers (top-right) to compare NDVI and NDBI.<br>
-  <span style="color:#f55">■</span> Veg loss &nbsp;
-  <span style="color:#fa0">■</span> Urban gain
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+  .gs-panel {
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    color: #e8eaf0;
+    background: rgba(10,12,25,0.92);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .gs-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    margin: 2px 0;
+  }
+  .help-modal {
+    display: none;
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 99999;
+    width: 420px;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+  .swatch { display:inline-block; width:14px; height:14px; border-radius:3px; margin-right:5px; vertical-align:middle; }
+</style>
+
+<!-- MAIN PANEL -->
+<div class="gs-panel" style="position:fixed;top:12px;left:64px;z-index:9998;padding:14px 18px;max-width:310px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+    <span style="font-size:22px">🛰️</span>
+    <div>
+      <div style="font-weight:700;font-size:14px;color:#7dd3fc">GeoSight — Bengaluru</div>
+      <div style="color:#94a3b8;font-size:11px">Sentinel-2 · 2019 vs 2024 · Google Earth Engine</div>
+    </div>
+  </div>
+
+  <hr style="border-color:rgba(255,255,255,0.1);margin:8px 0">
+
+  <!-- Stats -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+    <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:8px;text-align:center">
+      <div style="font-size:10px;color:#94a3b8;margin-bottom:2px">ΔNDVI (2019→2024)</div>
+      <div style="font-size:18px;font-weight:700;color:#f87171">-0.0091</div>
+      <div style="font-size:10px;color:#fbbf24">⚠️ Vegetation Declining</div>
+    </div>
+    <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:8px;text-align:center">
+      <div style="font-size:10px;color:#94a3b8;margin-bottom:2px">ΔNDBI (2019→2024)</div>
+      <div style="font-size:18px;font-weight:700;color:#fb923c">+0.0001</div>
+      <div style="font-size:10px;color:#fbbf24">🏙️ Urban Expanding</div>
+    </div>
+  </div>
+
+  <!-- Colour Legend -->
+  <div style="font-weight:600;font-size:11px;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Layer Colour Guide</div>
+  <div style="font-size:11px;line-height:1.8">
+    <div><span class="swatch" style="background:#d73027"></span> <b>Red</b> — Low/No vegetation (bare soil, roads, buildings)</div>
+    <div><span class="swatch" style="background:#ffffbf"></span> <b>Yellow</b> — Sparse vegetation or transitional land</div>
+    <div><span class="swatch" style="background:#1a9850"></span> <b>Green</b> — Dense vegetation, parks, forests</div>
+    <div><span class="swatch" style="background:#08519c"></span> <b>Blue</b> — Water bodies (lakes, rivers)</div>
+    <div><span class="swatch" style="background:#bd0026"></span> <b>Dark Red (NDBI)</b> — Urban built-up areas increased</div>
+  </div>
+
+  <hr style="border-color:rgba(255,255,255,0.1);margin:8px 0">
+  <div style="font-size:10px;color:#64748b">Toggle layers → top-right controls<br>Zoom/pan freely · Data: 100m/px resolution</div>
+  <button onclick="document.getElementById('help-modal').style.display='block'"
+    style="margin-top:10px;background:rgba(125,211,252,0.15);border:1px solid #7dd3fc;
+           color:#7dd3fc;padding:5px 14px;border-radius:6px;cursor:pointer;font-size:12px;
+           font-family:Inter,sans-serif;width:100%">❓ Help — What do these layers mean?</button>
+</div>
+
+<!-- HELP MODAL -->
+<div id="help-modal" class="gs-panel help-modal" style="padding:20px;width:440px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <span style="font-weight:700;font-size:15px;color:#7dd3fc">📖 Layer Guide</span>
+    <button onclick="document.getElementById('help-modal').style.display='none'"
+      style="background:rgba(255,255,255,0.1);border:none;color:white;padding:3px 10px;
+             border-radius:6px;cursor:pointer;font-size:14px">✕</button>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:10px;font-size:12px;line-height:1.6">
+
+    <div style="background:rgba(26,152,80,0.15);border-left:3px solid #1a9850;padding:10px;border-radius:0 8px 8px 0">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">🌿 NDVI 2019 / NDVI 2024 — Vegetation Health</div>
+      NDVI = (NIR − Red) / (NIR + Red). Satellites can see Near-Infrared light invisible to the human eye.
+      Healthy plants reflect NIR strongly → high NDVI.
+      <br><b>Compare these two layers</b> to see whether Bengaluru's green cover increased or decreased.
+      <br><span class="swatch" style="background:#d73027"></span>Red = urban/bare &nbsp;
+      <span class="swatch" style="background:#1a9850"></span>Green = dense vegetation
+    </div>
+
+    <div style="background:rgba(215,48,39,0.15);border-left:3px solid #d73027;padding:10px;border-radius:0 8px 8px 0">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">🔴 ΔNDVI Change (Red = Loss)</div>
+      This layer directly shows WHERE vegetation changed between 2019 and 2024.
+      <br><b>Red pixels</b> = areas where NDVI dropped significantly = vegetation was lost (deforestation, urban construction)
+      <br><b>White/neutral</b> = no significant change
+      <br><b>Green pixels</b> = new vegetation grew (afforestation, seasonal)
+      <br><b>Key finding:</b> Mean ΔNDVI = -0.0091 across Bengaluru metro
+    </div>
+
+    <div style="background:rgba(189,0,38,0.15);border-left:3px solid #bd0026;padding:10px;border-radius:0 8px 8px 0">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">🏙️ ΔNDBI Urban Growth</div>
+      NDBI = (SWIR − NIR) / (SWIR + NIR). Built-up areas (concrete, metal roofs, asphalt) reflect Shortwave Infrared (SWIR) strongly.
+      <br><b>Orange/Red</b> = areas that became more built-up between 2019 and 2024
+      <br><b>White</b> = no urban change
+      <br>Use this layer to spot which suburbs of Bengaluru grew fastest.
+    </div>
+
+    <div style="background:rgba(8,81,156,0.15);border-left:3px solid #08519c;padding:10px;border-radius:0 8px 8px 0">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">💧 NDWI 2024 — Water Bodies</div>
+      NDWI = (Green − NIR) / (Green + NIR). Water absorbs NIR and reflects Green.
+      <br><b>Blue</b> = lakes, rivers, reservoirs.
+      You can spot Ulsoor Lake, Bellandur Lake, and other Bengaluru waterbodies here.
+    </div>
+
+    <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px">📊 Real Data Summary</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <tr style="color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.1)">
+          <th style="text-align:left;padding:4px 0">Metric</th><th>2019</th><th>2024</th><th>Change</th>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+          <td>Mean NDVI</td><td style="text-align:center">0.2598</td>
+          <td style="text-align:center">0.2507</td>
+          <td style="text-align:center;color:#f87171">-0.0091</td>
+        </tr>
+        <tr>
+          <td>Mean NDBI</td><td style="text-align:center">0.0513</td>
+          <td style="text-align:center">0.0514</td>
+          <td style="text-align:center;color:#fb923c">+0.0001</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div style="margin-top:14px;font-size:11px;color:#64748b">
+    Data: Sentinel-2 L2A | Sensor: Copernicus/ESA | Analysis: GeoSight pipeline<br>
+    Built with Google Earth Engine · samgeo · folium · numpy | CMR Institute of Technology
+  </div>
+</div>
+
+<!-- RESULTS PANEL bottom-left -->
+<div class="gs-panel" style="position:fixed;bottom:24px;left:12px;z-index:9998;padding:12px 16px;max-width:280px">
+  <div style="font-weight:700;font-size:12px;color:#7dd3fc;margin-bottom:8px">📁 Check Your Results Folder</div>
+  <div style="font-size:11px;color:#94a3b8;line-height:1.9">
+    <div>📊 <b style="color:#e2e8f0">bangalore_change_detection.png</b><br>
+    &nbsp;&nbsp;&nbsp;6-panel NDVI/NDBI before/after chart</div>
+    <div>🔴 <b style="color:#e2e8f0">bangalore_sam2_summary.png</b><br>
+    &nbsp;&nbsp;&nbsp;SAM segmentation RGB → labels</div>
+    <div>🗺️ <b style="color:#e2e8f0">bangalore_class_overlay.png</b><br>
+    &nbsp;&nbsp;&nbsp;Land cover painted on satellite image</div>
+    <div>📋 <b style="color:#e2e8f0">bangalore_class_stats.json</b><br>
+    &nbsp;&nbsp;&nbsp;Area in km² per land cover class</div>
+  </div>
 </div>
     
-            <div class="folium-map" id="map_541e57abd1ed0b3d8519078f7a93c0d7" ></div>
+            <div class="folium-map" id="map_e8cf6dd1a2bb2e94ec3b71da668934ba" ></div>
         
 </body>
 <script>
     
     
-            var map_541e57abd1ed0b3d8519078f7a93c0d7 = L.map(
-                "map_541e57abd1ed0b3d8519078f7a93c0d7",
+            var map_e8cf6dd1a2bb2e94ec3b71da668934ba = L.map(
+                "map_e8cf6dd1a2bb2e94ec3b71da668934ba",
                 {
                     center: [12.9716, 77.5946],
                     crs: L.CRS.EPSG3857,
@@ -88,7 +240,7 @@
 
         
     
-            var tile_layer_07782e609fc1d5905447dbac21c114de = L.tileLayer(
+            var tile_layer_a7f2e980266a403ac48a75fc2ce4e6dc = L.tileLayer(
                 "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
                 {
   "minZoom": 0,
@@ -105,11 +257,11 @@
             );
         
     
-            tile_layer_07782e609fc1d5905447dbac21c114de.addTo(map_541e57abd1ed0b3d8519078f7a93c0d7);
+            tile_layer_a7f2e980266a403ac48a75fc2ce4e6dc.addTo(map_e8cf6dd1a2bb2e94ec3b71da668934ba);
         
     
-            var tile_layer_88ba30b11694037da126183110acea76 = L.tileLayer(
-                "https://earthengine.googleapis.com/v1/projects/geosight-project/maps/0673f036cda0b9df8dd206818b626801-acf7abd8ad64a4de3e01998097673be4/tiles/{z}/{x}/{y}",
+            var tile_layer_50b449e2a2cb16e501b0b132bccff496 = L.tileLayer(
+                "https://earthengine.googleapis.com/v1/projects/geosight-project/maps/09be0442da0750b93a0431d1df0515d5-99b172d7c0f487563772fc2a244520e9/tiles/{z}/{x}/{y}",
                 {
   "minZoom": 0,
   "maxZoom": 18,
@@ -125,11 +277,11 @@
             );
         
     
-            tile_layer_88ba30b11694037da126183110acea76.addTo(map_541e57abd1ed0b3d8519078f7a93c0d7);
+            tile_layer_50b449e2a2cb16e501b0b132bccff496.addTo(map_e8cf6dd1a2bb2e94ec3b71da668934ba);
         
     
-            var tile_layer_9028dcea53473e634e70d378d6a95f09 = L.tileLayer(
-                "https://earthengine.googleapis.com/v1/projects/geosight-project/maps/5b1fd800d901614d1775711165cfc4ca-928b6aa00de5f185268d1aa5b5295855/tiles/{z}/{x}/{y}",
+            var tile_layer_808a2e5ba3e9a7840491d71b4a8509ed = L.tileLayer(
+                "https://earthengine.googleapis.com/v1/projects/geosight-project/maps/bede32588ca2c35316159adfa5e22411-659a4cb620a42fa927c1dd39dcdd0cb9/tiles/{z}/{x}/{y}",
                 {
   "minZoom": 0,
   "maxZoom": 18,
@@ -145,11 +297,11 @@
             );
         
     
-            tile_layer_9028dcea53473e634e70d378d6a95f09.addTo(map_541e57abd1ed0b3d8519078f7a93c0d7);
+            tile_layer_808a2e5ba3e9a7840491d71b4a8509ed.addTo(map_e8cf6dd1a2bb2e94ec3b71da668934ba);
         
     
-            var tile_layer_a7ffbb4324a90f03adcaa50c10a8d0bf = L.tileLayer(
-                "https://earthengine.googleapis.com/v1/projects/geosight-project/maps/fec7cdd55f3c4984609298ba8e486e4b-1114b92fd61e9834d31d6e3c3b28ae95/tiles/{z}/{x}/{y}",
+            var tile_layer_b8743a140bc2e5c3cf6e443369e1042a = L.tileLayer(
+                "https://earthengine.googleapis.com/v1/projects/geosight-project/maps/3481e5674b6aecaf480406cecb27ade2-4bb1955695f8c760db1fda445d1d52dd/tiles/{z}/{x}/{y}",
                 {
   "minZoom": 0,
   "maxZoom": 18,
@@ -165,11 +317,11 @@
             );
         
     
-            tile_layer_a7ffbb4324a90f03adcaa50c10a8d0bf.addTo(map_541e57abd1ed0b3d8519078f7a93c0d7);
+            tile_layer_b8743a140bc2e5c3cf6e443369e1042a.addTo(map_e8cf6dd1a2bb2e94ec3b71da668934ba);
         
     
-            var tile_layer_9868a1ef34364c8303319282d38bb5d4 = L.tileLayer(
-                "https://earthengine.googleapis.com/v1/projects/geosight-project/maps/6aaf9147150cb0b60be65e2e92a5bf80-ee280190cf045d27cbe3f694dbf4822f/tiles/{z}/{x}/{y}",
+            var tile_layer_198c291467c5a1a0f0cc1c50d096ec24 = L.tileLayer(
+                "https://earthengine.googleapis.com/v1/projects/geosight-project/maps/f17af33d9cb2dbbd27d9e3b9b699c80e-d73672bea541dd6c20eca37acaedaa71/tiles/{z}/{x}/{y}",
                 {
   "minZoom": 0,
   "maxZoom": 18,
@@ -185,29 +337,50 @@
             );
         
     
-            tile_layer_9868a1ef34364c8303319282d38bb5d4.addTo(map_541e57abd1ed0b3d8519078f7a93c0d7);
+            tile_layer_198c291467c5a1a0f0cc1c50d096ec24.addTo(map_e8cf6dd1a2bb2e94ec3b71da668934ba);
         
     
-            var layer_control_7aabe49c98227a151bce9d210676198e_layers = {
+            var tile_layer_0f3bff609f4b5ab9278fc1894ab8df65 = L.tileLayer(
+                "https://earthengine.googleapis.com/v1/projects/geosight-project/maps/dce46d8e03dcb4f3b6977d5842062ade-f3f6738275deff78a8fc8a82463bccce/tiles/{z}/{x}/{y}",
+                {
+  "minZoom": 0,
+  "maxZoom": 18,
+  "maxNativeZoom": 18,
+  "noWrap": false,
+  "attribution": "Google Earth Engine",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 0.8,
+}
+
+            );
+        
+    
+            tile_layer_0f3bff609f4b5ab9278fc1894ab8df65.addTo(map_e8cf6dd1a2bb2e94ec3b71da668934ba);
+        
+    
+            var layer_control_1113fe7a0504e916cfda175028d3fb91_layers = {
                 base_layers : {
-                    "cartodbdarkmatter" : tile_layer_07782e609fc1d5905447dbac21c114de,
+                    "cartodbdarkmatter" : tile_layer_a7f2e980266a403ac48a75fc2ce4e6dc,
                 },
                 overlays :  {
-                    "NDVI 2019" : tile_layer_88ba30b11694037da126183110acea76,
-                    "NDVI 2024" : tile_layer_9028dcea53473e634e70d378d6a95f09,
-                    "\u0394NDVI Change" : tile_layer_a7ffbb4324a90f03adcaa50c10a8d0bf,
-                    "\u0394NDBI Urban" : tile_layer_9868a1ef34364c8303319282d38bb5d4,
+                    "NDVI 2019 (Vegetation)" : tile_layer_50b449e2a2cb16e501b0b132bccff496,
+                    "NDVI 2024 (Vegetation)" : tile_layer_808a2e5ba3e9a7840491d71b4a8509ed,
+                    "\u0394NDVI Change (Red=Loss)" : tile_layer_b8743a140bc2e5c3cf6e443369e1042a,
+                    "\u0394NDBI Urban Growth (Red=Built-up)" : tile_layer_198c291467c5a1a0f0cc1c50d096ec24,
+                    "NDWI 2024 (Water Bodies)" : tile_layer_0f3bff609f4b5ab9278fc1894ab8df65,
                 },
             };
-            let layer_control_7aabe49c98227a151bce9d210676198e = L.control.layers(
-                layer_control_7aabe49c98227a151bce9d210676198e_layers.base_layers,
-                layer_control_7aabe49c98227a151bce9d210676198e_layers.overlays,
+            let layer_control_1113fe7a0504e916cfda175028d3fb91 = L.control.layers(
+                layer_control_1113fe7a0504e916cfda175028d3fb91_layers.base_layers,
+                layer_control_1113fe7a0504e916cfda175028d3fb91_layers.overlays,
                 {
   "position": "topright",
   "collapsed": false,
   "autoZIndex": true,
 }
-            ).addTo(map_541e57abd1ed0b3d8519078f7a93c0d7);
+            ).addTo(map_e8cf6dd1a2bb2e94ec3b71da668934ba);
 
         
 </script>

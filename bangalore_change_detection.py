@@ -179,45 +179,209 @@ plt.close()
 print(f"      ✅ Saved {out_png}")
 
 # ─────────────────────────────────────────────
-# 6.  Interactive Folium Map
+# 6.  Interactive Folium Map + Rich HTML Dashboard
 # ─────────────────────────────────────────────
-print("[6/6] Generating interactive Folium map…")
+print("[6/6] Generating rich interactive HTML map…")
+
+# Fetch real GEE stats first
+stats = {
+    "NDVI 2019": ndvi_2019.reduceRegion(ee.Reducer.mean(), ROI, SCALE).getInfo(),
+    "NDVI 2024": ndvi_2024.reduceRegion(ee.Reducer.mean(), ROI, SCALE).getInfo(),
+    "NDBI 2019": ndbi_2019.reduceRegion(ee.Reducer.mean(), ROI, SCALE).getInfo(),
+    "NDBI 2024": ndbi_2024.reduceRegion(ee.Reducer.mean(), ROI, SCALE).getInfo(),
+}
+mean_ndvi_2019 = list(stats["NDVI 2019"].values())[0]
+mean_ndvi_2024 = list(stats["NDVI 2024"].values())[0]
+mean_ndbi_2019 = list(stats["NDBI 2019"].values())[0]
+mean_ndbi_2024 = list(stats["NDBI 2024"].values())[0]
+d_ndvi = mean_ndvi_2024 - mean_ndvi_2019
+d_ndbi = mean_ndbi_2024 - mean_ndbi_2019
+ndvi_trend = "⚠️ Vegetation Declining" if d_ndvi < 0 else "✅ Vegetation Stable"
+ndbi_trend = "🏙️ Urban Expanding" if d_ndbi > 0 else "✅ Urban Stable"
 
 m = folium.Map(location=BENGALURU_CENTER, zoom_start=11,
                tiles="CartoDB dark_matter")
 
-# Add GEE tile layers
 def add_gee_layer(fmap, ee_image, vis, name):
     url = ee_image.getMapId(vis)["tile_fetcher"].url_format
     folium.TileLayer(
-        tiles=url,
-        attr="Google Earth Engine",
-        name=name,
-        overlay=True,
-        control=True,
-        opacity=0.8
+        tiles=url, attr="Google Earth Engine",
+        name=name, overlay=True, control=True, opacity=0.8
     ).add_to(fmap)
 
-add_gee_layer(m, ndvi_2019, {"min": -0.2, "max": 0.8, "palette": ["red","white","green"]}, "NDVI 2019")
-add_gee_layer(m, ndvi_2024, {"min": -0.2, "max": 0.8, "palette": ["red","white","green"]}, "NDVI 2024")
-add_gee_layer(m, delta_ndvi, {"min": -0.5, "max": 0.5, "palette": ["#d73027","white","#1a9850"]}, "ΔNDVI Change")
-add_gee_layer(m, delta_ndbi, {"min": -0.3, "max": 0.5, "palette": ["white","orange","red"]},      "ΔNDBI Urban")
+add_gee_layer(m, ndvi_2019, {"min": -0.2, "max": 0.8, "palette": ["#d73027","#ffffbf","#1a9850"]}, "NDVI 2019 (Vegetation)")
+add_gee_layer(m, ndvi_2024, {"min": -0.2, "max": 0.8, "palette": ["#d73027","#ffffbf","#1a9850"]}, "NDVI 2024 (Vegetation)")
+add_gee_layer(m, delta_ndvi, {"min": -0.5, "max": 0.5, "palette": ["#d73027","#ffffff","#1a9850"]}, "ΔNDVI Change (Red=Loss)")
+add_gee_layer(m, delta_ndbi, {"min": -0.3, "max": 0.5, "palette": ["#ffffff","#fd8d3c","#bd0026"]}, "ΔNDBI Urban Growth (Red=Built-up)")
+add_gee_layer(m, ndwi_2024, {"min": -0.3, "max": 0.5, "palette": ["#ffffb2","#74c476","#08519c"]}, "NDWI 2024 (Water Bodies)")
 
-folium.LayerControl(collapsed=False).add_to(m)
+folium.LayerControl(collapsed=False, position="topright").add_to(m)
 
-# Info box
-title_html = """
-<div style="position:fixed;top:10px;left:60px;z-index:9999;background:#111;
-            color:white;padding:10px 16px;border-radius:8px;font-size:13px;
-            border:1px solid #444;max-width:280px">
-  <b>🛰️ GeoSight — Bengaluru</b><br>
-  <span style="color:#aaa;font-size:11px">Sentinel-2 · 2019 vs 2024</span><br><br>
-  Toggle layers (top-right) to compare NDVI and NDBI.<br>
-  <span style="color:#f55">■</span> Veg loss &nbsp;
-  <span style="color:#fa0">■</span> Urban gain
+# ── Rich HTML overlay ──────────────────────────────────────────────────────────
+rich_html = f"""
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+  .gs-panel {{
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    color: #e8eaf0;
+    background: rgba(10,12,25,0.92);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }}
+  .gs-badge {{
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    margin: 2px 0;
+  }}
+  .help-modal {{
+    display: none;
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 99999;
+    width: 420px;
+    max-height: 85vh;
+    overflow-y: auto;
+  }}
+  .swatch {{ display:inline-block; width:14px; height:14px; border-radius:3px; margin-right:5px; vertical-align:middle; }}
+</style>
+
+<!-- MAIN PANEL -->
+<div class="gs-panel" style="position:fixed;top:12px;left:64px;z-index:9998;padding:14px 18px;max-width:310px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+    <span style="font-size:22px">🛰️</span>
+    <div>
+      <div style="font-weight:700;font-size:14px;color:#7dd3fc">GeoSight — Bengaluru</div>
+      <div style="color:#94a3b8;font-size:11px">Sentinel-2 · 2019 vs 2024 · Google Earth Engine</div>
+    </div>
+  </div>
+
+  <hr style="border-color:rgba(255,255,255,0.1);margin:8px 0">
+
+  <!-- Stats -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+    <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:8px;text-align:center">
+      <div style="font-size:10px;color:#94a3b8;margin-bottom:2px">ΔNDVI (2019→2024)</div>
+      <div style="font-size:18px;font-weight:700;color:{'#f87171' if d_ndvi < 0 else '#4ade80'}">{d_ndvi:+.4f}</div>
+      <div style="font-size:10px;color:#fbbf24">{ndvi_trend}</div>
+    </div>
+    <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:8px;text-align:center">
+      <div style="font-size:10px;color:#94a3b8;margin-bottom:2px">ΔNDBI (2019→2024)</div>
+      <div style="font-size:18px;font-weight:700;color:{'#fb923c' if d_ndbi > 0 else '#4ade80'}">{d_ndbi:+.4f}</div>
+      <div style="font-size:10px;color:#fbbf24">{ndbi_trend}</div>
+    </div>
+  </div>
+
+  <!-- Colour Legend -->
+  <div style="font-weight:600;font-size:11px;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Layer Colour Guide</div>
+  <div style="font-size:11px;line-height:1.8">
+    <div><span class="swatch" style="background:#d73027"></span> <b>Red</b> — Low/No vegetation (bare soil, roads, buildings)</div>
+    <div><span class="swatch" style="background:#ffffbf"></span> <b>Yellow</b> — Sparse vegetation or transitional land</div>
+    <div><span class="swatch" style="background:#1a9850"></span> <b>Green</b> — Dense vegetation, parks, forests</div>
+    <div><span class="swatch" style="background:#08519c"></span> <b>Blue</b> — Water bodies (lakes, rivers)</div>
+    <div><span class="swatch" style="background:#bd0026"></span> <b>Dark Red (NDBI)</b> — Urban built-up areas increased</div>
+  </div>
+
+  <hr style="border-color:rgba(255,255,255,0.1);margin:8px 0">
+  <div style="font-size:10px;color:#64748b">Toggle layers → top-right controls<br>Zoom/pan freely · Data: 100m/px resolution</div>
+  <button onclick="document.getElementById('help-modal').style.display='block'"
+    style="margin-top:10px;background:rgba(125,211,252,0.15);border:1px solid #7dd3fc;
+           color:#7dd3fc;padding:5px 14px;border-radius:6px;cursor:pointer;font-size:12px;
+           font-family:Inter,sans-serif;width:100%">❓ Help — What do these layers mean?</button>
+</div>
+
+<!-- HELP MODAL -->
+<div id="help-modal" class="gs-panel help-modal" style="padding:20px;width:440px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <span style="font-weight:700;font-size:15px;color:#7dd3fc">📖 Layer Guide</span>
+    <button onclick="document.getElementById('help-modal').style.display='none'"
+      style="background:rgba(255,255,255,0.1);border:none;color:white;padding:3px 10px;
+             border-radius:6px;cursor:pointer;font-size:14px">✕</button>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:10px;font-size:12px;line-height:1.6">
+
+    <div style="background:rgba(26,152,80,0.15);border-left:3px solid #1a9850;padding:10px;border-radius:0 8px 8px 0">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">🌿 NDVI 2019 / NDVI 2024 — Vegetation Health</div>
+      NDVI = (NIR − Red) / (NIR + Red). Satellites can see Near-Infrared light invisible to the human eye.
+      Healthy plants reflect NIR strongly → high NDVI.
+      <br><b>Compare these two layers</b> to see whether Bengaluru's green cover increased or decreased.
+      <br><span class="swatch" style="background:#d73027"></span>Red = urban/bare &nbsp;
+      <span class="swatch" style="background:#1a9850"></span>Green = dense vegetation
+    </div>
+
+    <div style="background:rgba(215,48,39,0.15);border-left:3px solid #d73027;padding:10px;border-radius:0 8px 8px 0">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">🔴 ΔNDVI Change (Red = Loss)</div>
+      This layer directly shows WHERE vegetation changed between 2019 and 2024.
+      <br><b>Red pixels</b> = areas where NDVI dropped significantly = vegetation was lost (deforestation, urban construction)
+      <br><b>White/neutral</b> = no significant change
+      <br><b>Green pixels</b> = new vegetation grew (afforestation, seasonal)
+      <br><b>Key finding:</b> Mean ΔNDVI = {d_ndvi:+.4f} across Bengaluru metro
+    </div>
+
+    <div style="background:rgba(189,0,38,0.15);border-left:3px solid #bd0026;padding:10px;border-radius:0 8px 8px 0">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">🏙️ ΔNDBI Urban Growth</div>
+      NDBI = (SWIR − NIR) / (SWIR + NIR). Built-up areas (concrete, metal roofs, asphalt) reflect Shortwave Infrared (SWIR) strongly.
+      <br><b>Orange/Red</b> = areas that became more built-up between 2019 and 2024
+      <br><b>White</b> = no urban change
+      <br>Use this layer to spot which suburbs of Bengaluru grew fastest.
+    </div>
+
+    <div style="background:rgba(8,81,156,0.15);border-left:3px solid #08519c;padding:10px;border-radius:0 8px 8px 0">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">💧 NDWI 2024 — Water Bodies</div>
+      NDWI = (Green − NIR) / (Green + NIR). Water absorbs NIR and reflects Green.
+      <br><b>Blue</b> = lakes, rivers, reservoirs.
+      You can spot Ulsoor Lake, Bellandur Lake, and other Bengaluru waterbodies here.
+    </div>
+
+    <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px">📊 Real Data Summary</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <tr style="color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.1)">
+          <th style="text-align:left;padding:4px 0">Metric</th><th>2019</th><th>2024</th><th>Change</th>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+          <td>Mean NDVI</td><td style="text-align:center">{mean_ndvi_2019:.4f}</td>
+          <td style="text-align:center">{mean_ndvi_2024:.4f}</td>
+          <td style="text-align:center;color:{'#f87171' if d_ndvi < 0 else '#4ade80'}">{d_ndvi:+.4f}</td>
+        </tr>
+        <tr>
+          <td>Mean NDBI</td><td style="text-align:center">{mean_ndbi_2019:.4f}</td>
+          <td style="text-align:center">{mean_ndbi_2024:.4f}</td>
+          <td style="text-align:center;color:{'#fb923c' if d_ndbi > 0 else '#4ade80'}">{d_ndbi:+.4f}</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div style="margin-top:14px;font-size:11px;color:#64748b">
+    Data: Sentinel-2 L2A | Sensor: Copernicus/ESA | Analysis: GeoSight pipeline<br>
+    Built with Google Earth Engine · samgeo · folium · numpy | CMR Institute of Technology
+  </div>
+</div>
+
+<!-- RESULTS PANEL bottom-left -->
+<div class="gs-panel" style="position:fixed;bottom:24px;left:12px;z-index:9998;padding:12px 16px;max-width:280px">
+  <div style="font-weight:700;font-size:12px;color:#7dd3fc;margin-bottom:8px">📁 Check Your Results Folder</div>
+  <div style="font-size:11px;color:#94a3b8;line-height:1.9">
+    <div>📊 <b style="color:#e2e8f0">bangalore_change_detection.png</b><br>
+    &nbsp;&nbsp;&nbsp;6-panel NDVI/NDBI before/after chart</div>
+    <div>🔴 <b style="color:#e2e8f0">bangalore_sam2_summary.png</b><br>
+    &nbsp;&nbsp;&nbsp;SAM segmentation RGB → labels</div>
+    <div>🗺️ <b style="color:#e2e8f0">bangalore_class_overlay.png</b><br>
+    &nbsp;&nbsp;&nbsp;Land cover painted on satellite image</div>
+    <div>📋 <b style="color:#e2e8f0">bangalore_class_stats.json</b><br>
+    &nbsp;&nbsp;&nbsp;Area in km² per land cover class</div>
+  </div>
 </div>
 """
-m.get_root().html.add_child(folium.Element(title_html))
+m.get_root().html.add_child(folium.Element(rich_html))
 
 out_html = "results/bangalore_interactive_map.html"
 m.save(out_html)
@@ -229,28 +393,14 @@ print(f"      ✅ Saved {out_html}")
 print("\n══════════════════════════════════════════════")
 print("  🚀 GeoSight Change Detection Complete!")
 print("══════════════════════════════════════════════")
-
-stats = {
-    "NDVI 2019": ndvi_2019.reduceRegion(ee.Reducer.mean(), ROI, SCALE).getInfo(),
-    "NDVI 2024": ndvi_2024.reduceRegion(ee.Reducer.mean(), ROI, SCALE).getInfo(),
-    "NDBI 2019": ndbi_2019.reduceRegion(ee.Reducer.mean(), ROI, SCALE).getInfo(),
-    "NDBI 2024": ndbi_2024.reduceRegion(ee.Reducer.mean(), ROI, SCALE).getInfo(),
-}
-
 for label, val in stats.items():
     key = list(val.keys())[0]
-    v   = val[key]
-    print(f"  {label}: {v:.4f}")
+    print(f"  {label}: {val[key]:.4f}")
 
-mean_ndvi_2019 = list(stats["NDVI 2019"].values())[0]
-mean_ndvi_2024 = list(stats["NDVI 2024"].values())[0]
-mean_ndbi_2019 = list(stats["NDBI 2019"].values())[0]
-mean_ndbi_2024 = list(stats["NDBI 2024"].values())[0]
-
-print(f"\n  ΔNDVI (2019→2024): {mean_ndvi_2024 - mean_ndvi_2019:+.4f}  "
-      f"{'🌲 more vegetation' if mean_ndvi_2024 > mean_ndvi_2019 else '⚠️  vegetation loss'}")
-print(f"  ΔNDBI (2019→2024): {mean_ndbi_2024 - mean_ndbi_2019:+.4f}  "
-      f"{'🏙️  urban expansion' if mean_ndbi_2024 > mean_ndbi_2019 else 'stable'}")
+print(f"\n  ΔNDVI (2019→2024): {d_ndvi:+.4f}  {ndvi_trend}")
+print(f"  ΔNDBI (2019→2024): {d_ndbi:+.4f}  {ndbi_trend}")
 print(f"\n  Outputs:")
 print(f"  📊 {out_png}")
 print(f"  🗺️  {out_html}  ← open in browser!")
+print(f"\n  💡 Check your results/ folder for all analysed images!")
+
