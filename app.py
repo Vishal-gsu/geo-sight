@@ -210,6 +210,18 @@ if page == "🏠 Home":
 # PAGE: CHANGE DETECTION
 # ─────────────────────────────────────────────────────────────────────────────
 elif page == "📊 Change Detection":
+    import io as _io
+    import streamlit.components.v1 as components
+
+    # ── Persist results across Streamlit re-runs (incl. those from st_folium) ─
+    CD_KEYS = {
+        "_cd_results":  None,   # dict with stats
+        "_cd_map_html": None,   # rendered folium HTML string
+    }
+    for k, v in CD_KEYS.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
     st.markdown("## 📊 Change Detection")
     st.markdown("Compare land cover changes between two years using real Sentinel-2 data.")
 
@@ -219,106 +231,128 @@ elif page == "📊 Change Detection":
 
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
-        city_name = st.selectbox("🌆 Select City", list(CITIES.keys()))
+        city_name = st.selectbox("🌆 Select City", list(CITIES.keys()), key="cd_city")
     with col2:
-        year_t1 = st.selectbox("📅 Year T1 (Before)", range(2018, 2025), index=1)
+        year_t1 = st.selectbox("📅 Year T1 (Before)", range(2018, 2025), index=1, key="cd_yr1")
     with col3:
-        year_t2 = st.selectbox("📅 Year T2 (After)", range(2018, 2025), index=6)
+        year_t2 = st.selectbox("📅 Year T2 (After)",  range(2018, 2025), index=6, key="cd_yr2")
 
-    idx_name = st.selectbox("📡 Spectral Index", list(INDICES.keys()))
+    idx_name = st.selectbox("📡 Spectral Index", list(INDICES.keys()), key="cd_idx")
     city = CITIES[city_name]
     idx  = INDICES[idx_name]
 
     st.info(f"**{city_name}:** {city['desc']}")
 
-    if st.button("🚀 Run Analysis", use_container_width=True):
-        if year_t1 >= year_t2:
-            st.error("T1 must be before T2!")
-            st.stop()
+    # Invalidate cache if user changes city / years / index
+    cached = st.session_state._cd_results
+    if cached and (
+        cached["city"] != city_name or
+        cached["year_t1"] != year_t1 or
+        cached["year_t2"] != year_t2 or
+        cached["index"] != idx_name.split("—")[0].strip()
+    ):
+        st.session_state._cd_results  = None
+        st.session_state._cd_map_html = None
 
-        roi_coords = city["roi"]
-        roi = ee.Geometry.Rectangle(roi_coords)
+    run_btn = st.button("🚀 Run Analysis", use_container_width=True,
+                        disabled=(year_t1 >= year_t2))
+    if year_t1 >= year_t2:
+        st.caption("⚠️ T1 must be before T2")
+
+    # ── On button click: compute everything and store in session_state ────────
+    if run_btn:
+        roi = ee.Geometry.Rectangle(city["roi"])
         short_name = idx_name.split("—")[0].strip()
+        b1, b2 = idx["bands"]
 
         with st.spinner(f"Fetching Sentinel-2 composites for {city_name} ({year_t1} & {year_t2})…"):
-            def get_composite(year):
+            def _comp(year):
                 return (
                     ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
                     .filterBounds(roi)
                     .filterDate(f"{year}-01-01", f"{year}-12-31")
                     .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 15))
-                    .select(["B2","B3","B4","B8","B11"])
-                    .median()
+                    .select(["B2","B3","B4","B8","B11"]).median()
                 )
-            img_t1 = get_composite(year_t1)
-            img_t2 = get_composite(year_t2)
-
-            b1, b2 = idx["bands"]
+            img_t1 = _comp(year_t1)
+            img_t2 = _comp(year_t2)
             index_t1 = img_t1.normalizedDifference([b1, b2]).rename(short_name)
             index_t2 = img_t2.normalizedDifference([b1, b2]).rename(short_name)
             delta    = index_t2.subtract(index_t1).rename(f"d{short_name}")
 
         with st.spinner("Computing regional statistics…"):
-            SCALE = 100
+            SCALE   = 100
             mean_t1 = list(index_t1.reduceRegion(ee.Reducer.mean(), roi, SCALE).getInfo().values())[0]
             mean_t2 = list(index_t2.reduceRegion(ee.Reducer.mean(), roi, SCALE).getInfo().values())[0]
             d_val   = mean_t2 - mean_t1
 
-        # Show stats
-        st.divider()
-        c1, c2, c3 = st.columns(3)
-        c1.metric(f"{short_name} {year_t1}", f"{mean_t1:.4f}")
-        c2.metric(f"{short_name} {year_t2}", f"{mean_t2:.4f}")
-        c3.metric(f"Δ Change", f"{d_val:+.4f}",
-                  delta=f"{'↓ Loss' if d_val < 0 else '↑ Gain'}",
-                  delta_color="inverse" if short_name == "NDVI" else "normal")
-
-        # Interpretation
-        if short_name == "NDVI":
-            if d_val < -0.02:
-                st.warning(f"⚠️ **Vegetation declining** in {city_name.split()[0]} — NDVI dropped {d_val:.4f} from {year_t1} to {year_t2}. Likely urban expansion or deforestation.")
-            elif d_val > 0.02:
-                st.success(f"🌿 **Vegetation improving** — NDVI rose {d_val:+.4f}. Possible afforestation or seasonal recovery.")
-            else:
-                st.info(f"📊 **Vegetation stable** — NDVI change of {d_val:+.4f} is within natural seasonal variation.")
-        elif short_name == "NDBI":
-            if d_val > 0.01:
-                st.warning(f"🏙️ **Urban expansion detected** — NDBI increased {d_val:+.4f} suggesting new construction.")
-        elif short_name == "NDWI":
-            if d_val < -0.01:
-                st.warning(f"💧 **Water bodies shrinking** — NDWI dropped {d_val:.4f}. Possible lake encroachment.")
-
-        # Live map
-        st.divider()
-        st.markdown(f"#### 🗺️ {short_name} Change Map — {year_t1} → {year_t2}")
-
-        with st.spinner("Generating map tiles from GEE…"):
-            vis_base = {"min": idx["range"][0], "max": idx["range"][1], "palette": idx["palette"]}
-            vis_delta = {"min": -0.3, "max": 0.3, "palette": ["#d73027", "#ffffff", "#1a9850"]}
-
+        with st.spinner("Generating map tiles…"):
+            vis_base  = {"min": idx["range"][0], "max": idx["range"][1], "palette": idx["palette"]}
+            vis_delta = {"min": -0.3, "max": 0.3, "palette": ["#d73027","#ffffff","#1a9850"]}
             m = folium.Map(location=city["center"], zoom_start=11, tiles="CartoDB dark_matter")
-            for img, vis, name in [
-                (index_t1, vis_base, f"{short_name} {year_t1}"),
-                (index_t2, vis_base, f"{short_name} {year_t2}"),
-                (delta,    vis_delta, f"Δ Change (Red=Loss)"),
+            for layer_img, vis, lname in [
+                (index_t1, vis_base,  f"{short_name} {year_t1}"),
+                (index_t2, vis_base,  f"{short_name} {year_t2}"),
+                (delta,    vis_delta, "Δ Change (Red=Loss)"),
             ]:
-                url = img.getMapId(vis)["tile_fetcher"].url_format
-                folium.TileLayer(tiles=url, attr="GEE", name=name, overlay=True, control=True).add_to(m)
+                url = layer_img.getMapId(vis)["tile_fetcher"].url_format
+                folium.TileLayer(tiles=url, attr="GEE", name=lname,
+                                 overlay=True, control=True, show=True).add_to(m)
             folium.LayerControl(collapsed=False, position="topright").add_to(m)
+            buf = _io.BytesIO()
+            m.save(buf, close_file=False)
+            map_html = buf.getvalue().decode("utf-8")
 
-        st_folium(m, height=480, use_container_width=True)
-
-        # Save stats
-        RESULTS_DIR.mkdir(exist_ok=True)
-        stats_out = {
+        # Save to session_state → survives all future re-runs
+        st.session_state._cd_results = {
             "city": city_name, "index": short_name,
             "year_t1": year_t1, "year_t2": year_t2,
-            "mean_t1": round(mean_t1, 4), "mean_t2": round(mean_t2, 4),
-            "delta": round(d_val, 4)
+            "mean_t1": mean_t1, "mean_t2": mean_t2, "d_val": d_val,
         }
+        st.session_state._cd_map_html = map_html
+
+        # Persist to disk
+        RESULTS_DIR.mkdir(exist_ok=True)
         with open(RESULTS_DIR / "last_analysis.json", "w") as f:
-            json.dump(stats_out, f, indent=2)
+            json.dump({k: round(v, 4) if isinstance(v, float) else v
+                       for k, v in st.session_state._cd_results.items()}, f, indent=2)
+
+    # ── Always render from cache (survives re-runs triggered by map/widgets) ──
+    res = st.session_state._cd_results
+    if res:
+        sn = res["index"]
+        st.divider()
+
+        # Stats row
+        c1, c2, c3 = st.columns(3)
+        c1.metric(f"{sn} {res['year_t1']}", f"{res['mean_t1']:.4f}")
+        c2.metric(f"{sn} {res['year_t2']}", f"{res['mean_t2']:.4f}")
+        d = res["d_val"]
+        c3.metric("Δ Change", f"{d:+.4f}",
+                  delta=f"{'↓ Loss' if d < 0 else '↑ Gain'}",
+                  delta_color="inverse" if sn == "NDVI" else "normal")
+
+        # Interpretation
+        if sn == "NDVI":
+            if d < -0.02:
+                st.warning(f"⚠️ **Vegetation declining** in {res['city'].split()[0]} — NDVI dropped {d:.4f}. Likely urban expansion or deforestation.")
+            elif d > 0.02:
+                st.success(f"🌿 **Vegetation improving** — NDVI rose {d:+.4f}. Possible afforestation or seasonal recovery.")
+            else:
+                st.info(f"📊 **Vegetation stable** — NDVI change of {d:+.4f} is within natural seasonal variation.")
+        elif sn == "NDBI" and d > 0.01:
+            st.warning(f"🏙️ **Urban expansion detected** — NDBI increased {d:+.4f} suggesting new construction.")
+        elif sn == "NDWI" and d < -0.01:
+            st.warning(f"💧 **Water bodies shrinking** — NDWI dropped {d:.4f}. Possible lake encroachment.")
+
+        # Map from cached HTML — never triggers a re-run
+        st.divider()
+        st.markdown(f"#### 🗺️ {sn} Change Map — {res['year_t1']} → {res['year_t2']}")
+        st.caption(f"📍 {res['city'].split()[0]} · Toggle layers top-right")
+        components.html(st.session_state._cd_map_html, height=500, scrolling=False)
         st.success("✅ Results saved to `results/last_analysis.json`")
+
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE: INTERACTIVE MAP  (load-on-demand, cached across tab switches)
@@ -591,7 +625,7 @@ elif page == "🤖 SAM Segmentation":
             st.rerun()
 
         # Show results preview in col2
-        summary = Path("results/bangalore_sam2_summary.png")
+        summary = Path(f"results/{slug}_sam2_summary.png")
         if summary.exists():
             st.image(str(summary), caption="3-Panel: RGB → SAM → Classes", width='stretch')
         else:
@@ -603,24 +637,42 @@ elif page == "🤖 SAM Segmentation":
             )
 
     # ── Results gallery ───────────────────────────────────────────────────────
+    # Auto-detect thread completion even without Check Status click
+    if (st.session_state._sam_proc_status == "running" and
+            st.session_state._sam_proc_thread is not None and
+            not st.session_state._sam_proc_thread.is_alive()):
+        st.session_state._sam_proc_status = "done"
+        status = "done"
+        st.rerun()
+
+    done = (status == "done")
+
     st.divider()
+    if done:
+        st.markdown(
+            '<div style="background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);'
+            'border-radius:12px;padding:14px 20px;margin-bottom:16px">'
+            '✅ <b>Segmentation complete!</b> Results are shown below ↓</div>',
+            unsafe_allow_html=True
+        )
     st.markdown("### 📊 All Segmentation Outputs")
+
     sam_result_files = {
-        "results/bangalore_sam2_summary.png":            "3-Panel: RGB → SAM Segments → Land Cover",
-        "results/bangalore_class_overlay.png":           "Land cover classes on satellite image",
-        "results/bangalore_classification_map.png":      "Pure classification map",
-        "results/bangalore_class_overlay_fallback.png":  "Spectral fallback classification",
+        f"results/{slug}_sam2_summary.png":          f"{city_name.split()[0]} — 3-Panel: RGB → SAM Segments → Land Cover",
+        f"results/{slug}_class_overlay.png":         f"{city_name.split()[0]} — Land cover classes on satellite image",
+        f"results/{slug}_classification_map.png":    f"{city_name.split()[0]} — Pure classification map",
+        f"results/{slug}_class_overlay_fallback.png":f"{city_name.split()[0]} — Spectral fallback (no SAM)",
     }
     any_shown = False
     for fpath, cap in sam_result_files.items():
         p = Path(fpath)
         if p.exists():
             any_shown = True
-            with st.expander(f"📊 {cap}", expanded=False):
+            with st.expander(f"📊 {cap}", expanded=done):
                 st.image(str(p), width='stretch')
 
-    for sp in [Path("results/bangalore_class_stats.json"),
-               Path("results/bangalore_class_stats_fallback.json")]:
+    for sp in [Path(f"results/{slug}_class_stats.json"),
+               Path(f"results/{slug}_class_stats_fallback.json")]:
         if sp.exists():
             with open(sp) as f:
                 sd = json.load(f)
