@@ -200,20 +200,6 @@ Get a GEE project at [earthengine.google.com](https://earthengine.google.com).
 
 ---
 
-## JD Alignment (KaleidEO / SatSure)
-
-| JD Requirement | Implementation |
-|:---|:---|
-| Image preprocessing & quality checks | `preprocess.py` — SCL cloud masking, normalization, UTM reproject |
-| Geospatial libraries (rasterio, GDAL) | Fully integrated in preprocessing |
-| Spectral / frequency domain concepts | NDVI/NDWI/NDBI + 3 deep-dive concept docs |
-| Deep Learning exposure (SAM, ViT) | `sam2_segmentation.py` — SAM `vit_b` zero-shot segmentation |
-| Change detection & report generation | `bangalore_change_detection.py` + Folium HTML + JSON stats |
-| Python scripting & automation | Modular `src/` package + CLI scripts + Streamlit dashboard |
-| Multi-city scalability | download_tile.py & sam2_segmentation.py — city-parametrised |
-| AlphaEarth Foundation Models | `src/embeddings.py` — integration ready, awaiting public GEE release |
-
----
 
 ## Accuracy Notes {#accuracy}
 
