@@ -415,11 +415,11 @@ elif page == "🤖 SAM Segmentation":
     tile_path = Path(f"data/{slug}_patch/{slug}_rgb.png")
 
     # ── session state init ───────────────────────────────────────────────────
-    if "sam_thread" not in st.session_state:
-        st.session_state.sam_thread  = None
-        st.session_state.sam_status  = "idle"   # idle | downloading | running | done | error
-        st.session_state.sam_city    = None
-        st.session_state.sam_log     = ""
+    if "_sam_proc_thread" not in st.session_state:
+        st.session_state._sam_proc_thread  = None
+        st.session_state._sam_proc_status  = "idle"
+        st.session_state._sam_proc_city    = None
+        st.session_state._sam_proc_log     = ""
 
     st.info(f"**{city_name}:** {city['desc']}")
     st.caption(f"Tile path: `{tile_path}`")
@@ -433,45 +433,45 @@ elif page == "🤖 SAM Segmentation":
 
         if st.button("📥 Download Tile", use_container_width=True,
                      disabled=st.session_state.sam_status in ("downloading","running")):
-            st.session_state.sam_status = "downloading"
-            st.session_state.sam_city   = city_key
+            st.session_state._sam_proc_status = "downloading"
+            st.session_state._sam_proc_city   = city_key
 
             def _download():
                 r = subprocess.run(
                     [sys.executable, "download_tile.py", "--city", city_key],
                     capture_output=True, text=True, cwd=Path(__file__).parent
                 )
-                st.session_state.sam_log    = r.stdout + r.stderr
-                st.session_state.sam_status = "idle" if r.returncode == 0 else "error"
+                st.session_state._sam_proc_log    = r.stdout + r.stderr
+                st.session_state._sam_proc_status = "idle" if r.returncode == 0 else "error"
 
             t = threading.Thread(target=_download, daemon=True)
             t.start()
-            st.session_state.sam_thread = t
+            st.session_state._sam_proc_thread = t
 
-        if st.session_state.sam_status == "downloading":
+        if st.session_state._sam_proc_status == "downloading":
             st.info("📡 Downloading from GEE — you can switch tabs, this runs in background.")
             if st.button("🔄 Check Status", key="dl_check"):
-                if not st.session_state.sam_thread.is_alive():
-                    st.session_state.sam_status = "idle"
+                if not st.session_state._sam_proc_thread.is_alive():
+                    st.session_state._sam_proc_status = "idle"
                     st.rerun()
 
         if tile_path.exists():
             st.success(f"✅ Tile ready: `{tile_path.name}`")
-            st.image(str(tile_path), caption=f"{city_name} · 2048×2048px · Sentinel-2 RGB", use_column_width=True)
+            st.image(str(tile_path), caption=f"{city_name} · 2048×2048px · Sentinel-2 RGB", use_container_width=True)
 
     # ── Step 2: SAM ──────────────────────────────────────────────────────────
     with col2:
         st.markdown("**Step 2 — Run SAM Segmentation**")
         st.caption("SAM vit_b detects all objects — ~2 min on CPU. Tab-switch safe ✅")
 
-        sam_ready = tile_path.exists() and st.session_state.sam_status not in ("running","downloading")
+        sam_ready = tile_path.exists() and st.session_state._sam_proc_status not in ("running","downloading")
 
         if st.button("🤖 Run SAM", use_container_width=True, disabled=not sam_ready):
             if not tile_path.exists():
                 st.error("Download the tile first!")
             else:
-                st.session_state.sam_status = "running"
-                st.session_state.sam_city   = city_key
+                st.session_state._sam_proc_status = "running"
+                st.session_state._sam_proc_city   = city_key
 
                 def _run_sam():
                     r = subprocess.run(
@@ -480,20 +480,20 @@ elif page == "🤖 SAM Segmentation":
                          "--city",  city_key],
                         capture_output=True, text=True, cwd=Path(__file__).parent
                     )
-                    st.session_state.sam_log    = r.stdout + r.stderr
-                    st.session_state.sam_status = "done" if r.returncode == 0 else "error"
+                    st.session_state._sam_proc_log    = r.stdout + r.stderr
+                    st.session_state._sam_proc_status = "done" if r.returncode == 0 else "error"
 
                 t = threading.Thread(target=_run_sam, daemon=True)
                 t.start()
-                st.session_state.sam_thread = t
+                st.session_state._sam_proc_thread = t
 
         # Status display
-        status = st.session_state.sam_status
+        status = st.session_state._sam_proc_status
         if status == "running":
             st.warning("⏳ SAM running in background (~2 min). Switch tabs freely. Click **Check Status** when ready.")
             if st.button("🔄 Check SAM Status", key="sam_check"):
-                if not st.session_state.sam_thread.is_alive():
-                    st.session_state.sam_status = "done"
+                if not st.session_state._sam_proc_thread.is_alive():
+                    st.session_state._sam_proc_status = "done"
                     st.rerun()
                 else:
                     st.info("Still running…")
@@ -502,7 +502,7 @@ elif page == "🤖 SAM Segmentation":
         elif status == "error":
             st.error("SAM failed — falling back to spectral classification results below.")
             with st.expander("Error log"):
-                st.code(st.session_state.sam_log[-1000:])
+                st.code(st.session_state._sam_proc_log[-1000:])
 
     # ── Results ──────────────────────────────────────────────────────────────
     st.divider()
@@ -518,7 +518,7 @@ elif page == "🤖 SAM Segmentation":
         p = Path(fpath)
         if p.exists():
             any_shown = True
-            st.image(str(p), caption=cap, use_column_width=True)
+            st.image(str(p), caption=cap, use_container_width=True)
 
     stats_path = Path("results/bangalore_class_stats.json")
     if not stats_path.exists():
@@ -567,7 +567,7 @@ elif page == "📁 Results Gallery":
             desc = descriptions.get(name, "Generated output image")
             with st.expander(f"📊 **{name}** — {desc}", expanded="sam2_summary" in name or "change_detection" in name):
                 img = Image.open(img_path)
-                st.image(img, use_column_width=True)
+                st.image(img, use_container_width=True)
                 col1, col2 = st.columns([4, 1])
                 with col1:
                     st.caption(f"📁 `results/{name}` · {img.size[0]}×{img.size[1]}px · {img_path.stat().st_size/1024:.0f} KB")
