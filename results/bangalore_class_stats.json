@@ -1,0 +1,32 @@
+{
+  "Unknown": {
+    "pixels": 3958772,
+    "area_sq_m": 35628948.0,
+    "area_sq_km": 35.6289,
+    "percentage": 94.38
+  },
+  "Vegetation": {
+    "pixels": 0,
+    "area_sq_m": 0.0,
+    "area_sq_km": 0.0,
+    "percentage": 0.0
+  },
+  "Water": {
+    "pixels": 167025,
+    "area_sq_m": 1503225.0,
+    "area_sq_km": 1.5032,
+    "percentage": 3.98
+  },
+  "Urban": {
+    "pixels": 50462,
+    "area_sq_m": 454158.0,
+    "area_sq_km": 0.4542,
+    "percentage": 1.2
+  },
+  "Bare Land": {
+    "pixels": 18045,
+    "area_sq_m": 162405.0,
+    "area_sq_km": 0.1624,
+    "percentage": 0.43
+  }
+}

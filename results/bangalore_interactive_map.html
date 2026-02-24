@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_541e57abd1ed0b3d8519078f7a93c0d7 {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
+
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
+
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
+
+        
+</head>
+<body>
+    
+    
+<div style="position:fixed;top:10px;left:60px;z-index:9999;background:#111;
+            color:white;padding:10px 16px;border-radius:8px;font-size:13px;
+            border:1px solid #444;max-width:280px">
+  <b>🛰️ GeoSight — Bengaluru</b><br>
+  <span style="color:#aaa;font-size:11px">Sentinel-2 · 2019 vs 2024</span><br><br>
+  Toggle layers (top-right) to compare NDVI and NDBI.<br>
+  <span style="color:#f55">■</span> Veg loss &nbsp;
+  <span style="color:#fa0">■</span> Urban gain
+</div>
+    
+            <div class="folium-map" id="map_541e57abd1ed0b3d8519078f7a93c0d7" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_541e57abd1ed0b3d8519078f7a93c0d7 = L.map(
+                "map_541e57abd1ed0b3d8519078f7a93c0d7",
+                {
+                    center: [12.9716, 77.5946],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 11,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_07782e609fc1d5905447dbac21c114de = L.tileLayer(
+                "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 20,
+  "maxNativeZoom": 20,
+  "noWrap": false,
+  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors \u0026copy; \u003ca href=\"https://carto.com/attributions\"\u003eCARTO\u003c/a\u003e",
+  "subdomains": "abcd",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_07782e609fc1d5905447dbac21c114de.addTo(map_541e57abd1ed0b3d8519078f7a93c0d7);
+        
+    
+            var tile_layer_88ba30b11694037da126183110acea76 = L.tileLayer(
+                "https://earthengine.googleapis.com/v1/projects/geosight-project/maps/0673f036cda0b9df8dd206818b626801-acf7abd8ad64a4de3e01998097673be4/tiles/{z}/{x}/{y}",
+                {
+  "minZoom": 0,
+  "maxZoom": 18,
+  "maxNativeZoom": 18,
+  "noWrap": false,
+  "attribution": "Google Earth Engine",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 0.8,
+}
+
+            );
+        
+    
+            tile_layer_88ba30b11694037da126183110acea76.addTo(map_541e57abd1ed0b3d8519078f7a93c0d7);
+        
+    
+            var tile_layer_9028dcea53473e634e70d378d6a95f09 = L.tileLayer(
+                "https://earthengine.googleapis.com/v1/projects/geosight-project/maps/5b1fd800d901614d1775711165cfc4ca-928b6aa00de5f185268d1aa5b5295855/tiles/{z}/{x}/{y}",
+                {
+  "minZoom": 0,
+  "maxZoom": 18,
+  "maxNativeZoom": 18,
+  "noWrap": false,
+  "attribution": "Google Earth Engine",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 0.8,
+}
+
+            );
+        
+    
+            tile_layer_9028dcea53473e634e70d378d6a95f09.addTo(map_541e57abd1ed0b3d8519078f7a93c0d7);
+        
+    
+            var tile_layer_a7ffbb4324a90f03adcaa50c10a8d0bf = L.tileLayer(
+                "https://earthengine.googleapis.com/v1/projects/geosight-project/maps/fec7cdd55f3c4984609298ba8e486e4b-1114b92fd61e9834d31d6e3c3b28ae95/tiles/{z}/{x}/{y}",
+                {
+  "minZoom": 0,
+  "maxZoom": 18,
+  "maxNativeZoom": 18,
+  "noWrap": false,
+  "attribution": "Google Earth Engine",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 0.8,
+}
+
+            );
+        
+    
+            tile_layer_a7ffbb4324a90f03adcaa50c10a8d0bf.addTo(map_541e57abd1ed0b3d8519078f7a93c0d7);
+        
+    
+            var tile_layer_9868a1ef34364c8303319282d38bb5d4 = L.tileLayer(
+                "https://earthengine.googleapis.com/v1/projects/geosight-project/maps/6aaf9147150cb0b60be65e2e92a5bf80-ee280190cf045d27cbe3f694dbf4822f/tiles/{z}/{x}/{y}",
+                {
+  "minZoom": 0,
+  "maxZoom": 18,
+  "maxNativeZoom": 18,
+  "noWrap": false,
+  "attribution": "Google Earth Engine",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 0.8,
+}
+
+            );
+        
+    
+            tile_layer_9868a1ef34364c8303319282d38bb5d4.addTo(map_541e57abd1ed0b3d8519078f7a93c0d7);
+        
+    
+            var layer_control_7aabe49c98227a151bce9d210676198e_layers = {
+                base_layers : {
+                    "cartodbdarkmatter" : tile_layer_07782e609fc1d5905447dbac21c114de,
+                },
+                overlays :  {
+                    "NDVI 2019" : tile_layer_88ba30b11694037da126183110acea76,
+                    "NDVI 2024" : tile_layer_9028dcea53473e634e70d378d6a95f09,
+                    "\u0394NDVI Change" : tile_layer_a7ffbb4324a90f03adcaa50c10a8d0bf,
+                    "\u0394NDBI Urban" : tile_layer_9868a1ef34364c8303319282d38bb5d4,
+                },
+            };
+            let layer_control_7aabe49c98227a151bce9d210676198e = L.control.layers(
+                layer_control_7aabe49c98227a151bce9d210676198e_layers.base_layers,
+                layer_control_7aabe49c98227a151bce9d210676198e_layers.overlays,
+                {
+  "position": "topright",
+  "collapsed": false,
+  "autoZIndex": true,
+}
+            ).addTo(map_541e57abd1ed0b3d8519078f7a93c0d7);
+
+        
+</script>
+</html>
