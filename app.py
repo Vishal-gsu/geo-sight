@@ -321,221 +321,322 @@ elif page == "📊 Change Detection":
         st.success("✅ Results saved to `results/last_analysis.json`")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PAGE: INTERACTIVE MAP
+# PAGE: INTERACTIVE MAP  (load-on-demand, cached across tab switches)
 # ─────────────────────────────────────────────────────────────────────────────
 elif page == "🗺️ Interactive Map":
     import streamlit.components.v1 as components
+
+    # ── persist map state so tab-switching doesn't reload ────────────────────
+    if "_map_html" not in st.session_state:
+        st.session_state._map_html      = None   # rendered HTML string
+        st.session_state._map_label     = None   # e.g. "Mumbai 2019→2024"
+        st.session_state._map_loading   = False
+
     st.markdown("## 🗺️ Interactive Satellite Map")
-    st.markdown("Select any city — the map generates live from Google Earth Engine.")
 
     if not gee_ok:
         st.error("🔴 Earth Engine not connected. Check sidebar.")
         st.stop()
 
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
+    # ── Controls row ─────────────────────────────────────────────────────────
+    cc1, cc2, cc3, cc4 = st.columns([3, 1, 1, 1])
+    with cc1:
         map_city_name = st.selectbox("🌆 City", list(CITIES.keys()), key="map_city")
-    with col2:
-        map_yr1 = st.selectbox("Year T1", range(2018, 2025), index=1, key="map_yr1")
-    with col3:
-        map_yr2 = st.selectbox("Year T2", range(2018, 2025), index=6, key="map_yr2")
+    with cc2:
+        map_yr1 = st.selectbox("T1", range(2018, 2025), index=1, key="map_yr1")
+    with cc3:
+        map_yr2 = st.selectbox("T2", range(2018, 2025), index=6, key="map_yr2")
+    with cc4:
+        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+        load_clicked = st.button("🗺️ Load Map", use_container_width=True,
+                                 type="primary",
+                                 disabled=st.session_state._map_loading)
 
     map_city = CITIES[map_city_name]
-    tab1, tab2 = st.tabs(["🌐 Live Map", "ℹ️ Layer Guide"])
+    st.caption(f"📍 {map_city['desc']}")
+    st.divider()
 
-    with tab1:
-        with st.spinner(f"Building live GEE map for {map_city_name}…"):
-            roi = ee.Geometry.Rectangle(map_city["roi"])
+    tab_map, tab_guide = st.tabs(["🌐 Map", "ℹ️ Layer Guide"])
 
-            def make_composite(year):
-                return (
-                    ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
-                    .filterBounds(roi)
-                    .filterDate(f"{year}-01-01", f"{year}-12-31")
-                    .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 15))
-                    .select(["B2","B3","B4","B8","B11"]).median()
-                )
+    with tab_map:
+        if load_clicked:
+            st.session_state._map_loading = True
+            label = f"{map_city_name.split()[0]} {map_yr1}→{map_yr2}"
+            with st.spinner(f"Fetching GEE tiles for {label}…  (~10 sec)"):
+                roi = ee.Geometry.Rectangle(map_city["roi"])
 
-            c1 = make_composite(map_yr1)
-            c2 = make_composite(map_yr2)
-            ndvi1 = c1.normalizedDifference(["B8","B4"]).rename("NDVI")
-            ndvi2 = c2.normalizedDifference(["B8","B4"]).rename("NDVI")
-            ndbi1 = c1.normalizedDifference(["B11","B8"]).rename("NDBI")
-            ndbi2 = c2.normalizedDifference(["B11","B8"]).rename("NDBI")
-            ndwi2 = c2.normalizedDifference(["B3","B8"]).rename("NDWI")
-            d_ndvi = ndvi2.subtract(ndvi1).rename("dNDVI")
-            d_ndbi = ndbi2.subtract(ndbi1).rename("dNDBI")
+                def _comp(yr):
+                    return (
+                        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+                        .filterBounds(roi)
+                        .filterDate(f"{yr}-01-01", f"{yr}-12-31")
+                        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 15))
+                        .select(["B2","B3","B4","B8","B11"]).median()
+                    )
 
-            m = folium.Map(location=map_city["center"], zoom_start=11, tiles="CartoDB dark_matter")
+                c1, c2 = _comp(map_yr1), _comp(map_yr2)
+                ndvi1  = c1.normalizedDifference(["B8","B4"]).rename("NDVI")
+                ndvi2  = c2.normalizedDifference(["B8","B4"]).rename("NDVI")
+                ndbi2  = c2.normalizedDifference(["B11","B8"]).rename("NDBI")
+                ndwi2  = c2.normalizedDifference(["B3","B8"]).rename("NDWI")
+                d_ndvi = ndvi2.subtract(ndvi1).rename("dNDVI")
+                d_ndbi = ndbi2.subtract(c1.normalizedDifference(["B11","B8"])).rename("dNDBI")
 
-            def add_layer(img, vis, name):
-                url = img.getMapId(vis)["tile_fetcher"].url_format
-                folium.TileLayer(tiles=url, attr="GEE", name=name, overlay=True, control=True, opacity=0.85).add_to(m)
+                m = folium.Map(location=map_city["center"], zoom_start=11,
+                               tiles="CartoDB dark_matter")
 
-            add_layer(ndvi1, {"min":-0.2,"max":0.8,"palette":["#d73027","#ffffbf","#1a9850"]}, f"NDVI {map_yr1} (Vegetation)")
-            add_layer(ndvi2, {"min":-0.2,"max":0.8,"palette":["#d73027","#ffffbf","#1a9850"]}, f"NDVI {map_yr2} (Vegetation)")
-            add_layer(d_ndvi,{"min":-0.4,"max":0.4,"palette":["#d73027","#ffffff","#1a9850"]}, "ΔNDVI Change (Red=Loss)")
-            add_layer(ndbi2, {"min":-0.3,"max":0.5,"palette":["#ffffff","#fd8d3c","#bd0026"]}, f"NDBI {map_yr2} (Urban)")
-            add_layer(d_ndbi,{"min":-0.3,"max":0.5,"palette":["#ffffff","#fd8d3c","#bd0026"]}, "ΔNDBI Urban Growth")
-            add_layer(ndwi2, {"min":-0.3,"max":0.5,"palette":["#ffffb2","#74c476","#08519c"]}, f"NDWI {map_yr2} (Water)")
-            folium.LayerControl(collapsed=False, position="topright").add_to(m)
+                LAYERS = [
+                    (ndvi1,  {"min":-0.2,"max":0.8, "palette":["#d73027","#ffffbf","#1a9850"]}, f"🌿 NDVI {map_yr1}"),
+                    (ndvi2,  {"min":-0.2,"max":0.8, "palette":["#d73027","#ffffbf","#1a9850"]}, f"🌿 NDVI {map_yr2}"),
+                    (d_ndvi, {"min":-0.4,"max":0.4, "palette":["#d73027","#ffffff","#1a9850"]}, "🔴 ΔNDVI Change"),
+                    (ndbi2,  {"min":-0.3,"max":0.5, "palette":["#ffffff","#fd8d3c","#bd0026"]}, f"🏙️ NDBI {map_yr2}"),
+                    (d_ndbi, {"min":-0.3,"max":0.5, "palette":["#ffffff","#fd8d3c","#bd0026"]}, "🏗️ ΔNDBI Growth"),
+                    (ndwi2,  {"min":-0.3,"max":0.5, "palette":["#ffffb2","#74c476","#08519c"]}, f"💧 NDWI {map_yr2}"),
+                ]
+                for img, vis, name in LAYERS:
+                    url = img.getMapId(vis)["tile_fetcher"].url_format
+                    # show=False → all layers unchecked by default, user picks what to see
+                    folium.TileLayer(
+                        tiles=url, attr="GEE", name=name,
+                        overlay=True, control=True, opacity=0.85, show=False
+                    ).add_to(m)
 
-        st.caption(f"{map_city_name} · {map_yr1} vs {map_yr2} · Toggle layers top-right · Zoom freely")
-        st_folium(m, height=600, use_container_width=True)
+                folium.LayerControl(collapsed=False, position="topright").add_to(m)
 
-    with tab2:
-        st.markdown("### Layer Colour Guide")
+                import io
+                html_io = io.BytesIO()
+                m.save(html_io, close_file=False)
+                st.session_state._map_html    = html_io.getvalue().decode("utf-8")
+                st.session_state._map_label   = label
+                st.session_state._map_loading = False
+
+        if st.session_state._map_html:
+            st.markdown(
+                f"<div style='display:inline-block;background:rgba(125,211,252,0.1);"
+                f"border:1px solid rgba(125,211,252,0.3);border-radius:8px;"
+                f"padding:4px 12px;font-size:12px;margin-bottom:8px'>"
+                f"📍 <b>{st.session_state._map_label}</b> loaded "
+                f"· Tick layers (top-right) to reveal them</div>",
+                unsafe_allow_html=True
+            )
+            components.html(st.session_state._map_html, height=620, scrolling=False)
+            if st.button("🔄 Reload with current settings"):
+                st.session_state._map_html  = None
+                st.session_state._map_label = None
+                st.rerun()
+        else:
+            # Pretty placeholder before first load
+            st.markdown("""
+<div style="border:1px dashed rgba(125,211,252,0.3);border-radius:16px;
+            padding:60px 40px;text-align:center;margin-top:16px">
+  <div style="font-size:48px;margin-bottom:12px">🛰️</div>
+  <div style="font-size:18px;font-weight:600;color:#7dd3fc;margin-bottom:8px">
+    Select City + Years → Press Load Map
+  </div>
+  <div style="font-size:13px;color:#64748b">
+    All 6 satellite layers will load. Tick layers individually to compare.<br>
+    Map stays cached — switch tabs freely without reloading.
+  </div>
+</div>""", unsafe_allow_html=True)
+
+    with tab_guide:
+        st.markdown("### What each layer shows")
         layer_guide = [
-            ("NDVI (Vegetation)",   ["#d73027","#ffffbf","#1a9850"], ["Bare/Urban","Sparse","Dense Vegetation"], "(NIR–Red)/(NIR+Red) — plants reflect NIR strongly."),
-            ("ΔNDVI Change",        ["#d73027","#ffffff","#1a9850"], ["Vegetation Lost","No Change","Vegetation Gained"], "Red = forest/park removed. Green = new vegetation."),
-            ("NDBI/ΔNDBI (Urban)",  ["#ffffff","#fd8d3c","#bd0026"], ["No urban","Some growth","High growth"], "(SWIR–NIR)/(SWIR+NIR) — concrete reflects SWIR."),
-            ("NDWI (Water)",        ["#ffffb2","#74c476","#08519c"], ["No water","Moist land","Open water"], "(Green–NIR)/(Green+NIR) — lakes, rivers, reservoirs."),
+            ("🌿 NDVI — Vegetation", ["#d73027","#ffffbf","#1a9850"],
+             ["Bare/Urban","Sparse","Dense Vegetation"],
+             "NIR bands detect plant chlorophyll invisible to human eye. High NDVI = healthy forest/parks."),
+            ("🔴 ΔNDVI Change", ["#d73027","#ffffff","#1a9850"],
+             ["Vegetation lost","No change","Vegetation gained"],
+             "Subtract T1 from T2. Red = deforestation, construction. Green = new growth."),
+            ("🏙️ NDBI — Urban Built-up", ["#ffffff","#fd8d3c","#bd0026"],
+             ["No urban","Moderate","Dense urban"],
+             "Concrete & asphalt reflect SWIR strongly. High NDBI = buildings, roads."),
+            ("🏗️ ΔNDBI Growth", ["#ffffff","#fd8d3c","#bd0026"],
+             ["No change","Some growth","High growth"],
+             "Where new concrete appeared between T1 and T2 — spot new suburbs, highways."),
+            ("💧 NDWI — Water", ["#ffffb2","#74c476","#08519c"],
+             ["No water","Moist","Open water"],
+             "Green band absorbed by water. Blue = lakes, rivers. Track shrinkage over time."),
         ]
         for name, colors, labels, desc in layer_guide:
             with st.expander(f"**{name}**"):
                 st.caption(desc)
-                cols = st.columns(3)
-                for i, (c, l) in enumerate(zip(colors, labels)):
-                    with cols[i]:
-                        st.markdown(f'<div style="background:{c};height:28px;border-radius:6px;margin-bottom:4px"></div><div style="font-size:11px;text-align:center">{l}</div>', unsafe_allow_html=True)
+                c1c, c2c, c3c = st.columns(3)
+                for col_obj, clr, lbl in zip([c1c, c2c, c3c], colors, labels):
+                    with col_obj:
+                        st.markdown(
+                            f'<div style="background:{clr};height:28px;border-radius:6px;margin-bottom:4px"></div>'
+                            f'<div style="font-size:11px;text-align:center">{lbl}</div>',
+                            unsafe_allow_html=True
+                        )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PAGE: SAM SEGMENTATION
+# PAGE: SAM SEGMENTATION  (full state persisted in session_state)
 # ─────────────────────────────────────────────────────────────────────────────
 elif page == "🤖 SAM Segmentation":
     import threading
-    st.markdown("## 🤖 SAM Segmentation")
-    st.markdown("Zero-shot land cover detection using Meta's Segment Anything Model (SAM vit_b).")
 
-    city_name = st.selectbox("🌆 Select City", list(CITIES.keys()), key="sam_city")
-    # strip emoji for CLI
-    city_key = city_name.split()[0]   # e.g. 'Bengaluru', 'Mumbai'
-    city     = CITIES[city_name]
-    slug     = city_key.lower()
+    # ── ALL page state lives in session_state so tab-switching is lossless ───
+    SAM_KEYS = {
+        "_sam_proc_thread":  None,
+        "_sam_proc_status":  "idle",    # idle | downloading | running | done | error
+        "_sam_proc_city":    list(CITIES.keys())[0],
+        "_sam_proc_log":     "",
+    }
+    for k, v in SAM_KEYS.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+    st.markdown("## 🤖 SAM Segmentation")
+    st.markdown("Zero-shot land cover detection using Meta's Segment Anything Model `vit_b`.")
+
+    # City selector — index driven by persisted _sam_proc_city
+    city_list = list(CITIES.keys())
+    saved_city = st.session_state._sam_proc_city
+    saved_idx  = city_list.index(saved_city) if saved_city in city_list else 0
+    city_name  = st.selectbox("🌆 City", city_list, index=saved_idx, key="sam_city_sel")
+
+    # immediately persist selection so tab switch keeps it
+    st.session_state._sam_proc_city = city_name
+
+    city_key  = city_name.split()[0]
+    city      = CITIES[city_name]
+    slug      = city_key.lower()
     tile_path = Path(f"data/{slug}_patch/{slug}_rgb.png")
 
-    # ── session state init ───────────────────────────────────────────────────
-    if "_sam_proc_thread" not in st.session_state:
-        st.session_state._sam_proc_thread  = None
-        st.session_state._sam_proc_status  = "idle"
-        st.session_state._sam_proc_city    = None
-        st.session_state._sam_proc_log     = ""
-
     st.info(f"**{city_name}:** {city['desc']}")
-    st.caption(f"Tile path: `{tile_path}`")
 
+    # ── Status banner (always visible even after tab switch) ─────────────────
+    status = st.session_state._sam_proc_status
+    if status == "downloading":
+        st.info("📡 **Tile download running in background.** Switch tabs freely — click Check Status when back.")
+        if st.button("🔄 Check Download Status"):
+            t = st.session_state._sam_proc_thread
+            if t and not t.is_alive():
+                st.session_state._sam_proc_status = "idle"
+            st.rerun()
+    elif status == "running":
+        st.warning("⏳ **SAM running in background (~2 min).** Switch tabs freely — click Check Status when back.")
+        if st.button("🔄 Check SAM Status"):
+            t = st.session_state._sam_proc_thread
+            if t and not t.is_alive():
+                st.session_state._sam_proc_status = "done"
+            st.rerun()
+    elif status == "done":
+        st.success("✅ SAM segmentation complete! See results below ↓")
+    elif status == "error":
+        st.error("❌ Process failed.")
+        with st.expander("Error log"):
+            st.code(st.session_state._sam_proc_log[-1200:])
+
+    st.divider()
     col1, col2 = st.columns(2)
 
     # ── Step 1: Download ─────────────────────────────────────────────────────
     with col1:
-        st.markdown("**Step 1 — Download Satellite Tile**")
-        st.caption("Downloads a 2048×2048 RGB patch directly from GEE (~30 sec)")
+        st.markdown("#### 📥 Step 1 — Download Tile")
+        st.caption("Real 2048×2048 Sentinel-2 RGB patch from GEE · ~30 sec")
+        busy = status in ("downloading", "running")
 
-        if st.button("📥 Download Tile", use_container_width=True,
-                     disabled=st.session_state._sam_proc_status in ("downloading","running")):
+        if st.button("📥 Download Tile", use_container_width=True, disabled=busy, key="dl_btn"):
             st.session_state._sam_proc_status = "downloading"
-            st.session_state._sam_proc_city   = city_key
 
-            def _download():
+            def _dl(ck=city_key):
                 r = subprocess.run(
-                    [sys.executable, "download_tile.py", "--city", city_key],
+                    [sys.executable, "download_tile.py", "--city", ck],
                     capture_output=True, text=True, cwd=Path(__file__).parent
                 )
                 st.session_state._sam_proc_log    = r.stdout + r.stderr
                 st.session_state._sam_proc_status = "idle" if r.returncode == 0 else "error"
 
-            t = threading.Thread(target=_download, daemon=True)
+            t = threading.Thread(target=_dl, daemon=True)
             t.start()
             st.session_state._sam_proc_thread = t
-
-        if st.session_state._sam_proc_status == "downloading":
-            st.info("📡 Downloading from GEE — you can switch tabs, this runs in background.")
-            if st.button("🔄 Check Status", key="dl_check"):
-                if not st.session_state._sam_proc_thread.is_alive():
-                    st.session_state._sam_proc_status = "idle"
-                    st.rerun()
+            st.rerun()
 
         if tile_path.exists():
-            st.success(f"✅ Tile ready: `{tile_path.name}`")
-            st.image(str(tile_path), caption=f"{city_name} · 2048×2048px · Sentinel-2 RGB", use_container_width=True)
+            st.success(f"✅ `{tile_path.name}` ready")
+            st.image(str(tile_path),
+                     caption=f"{city_name} · 2048×2048 · Sentinel-2",
+                     width='stretch')
+        else:
+            st.markdown(
+                '<div style="border:1px dashed rgba(125,211,252,0.25);border-radius:12px;'
+                'padding:40px;text-align:center;color:#475569">'
+                '📡 No tile downloaded yet.<br>Click Download Tile above.</div>',
+                unsafe_allow_html=True
+            )
 
     # ── Step 2: SAM ──────────────────────────────────────────────────────────
     with col2:
-        st.markdown("**Step 2 — Run SAM Segmentation**")
-        st.caption("SAM vit_b detects all objects — ~2 min on CPU. Tab-switch safe ✅")
+        st.markdown("#### 🤖 Step 2 — Run SAM")
+        st.caption("Auto-detects all land cover segments · ~2 min on CPU")
+        sam_ready = tile_path.exists() and status not in ("running", "downloading")
 
-        sam_ready = tile_path.exists() and st.session_state._sam_proc_status not in ("running","downloading")
+        if st.button("🤖 Run SAM", use_container_width=True,
+                     disabled=not sam_ready, key="sam_btn"):
+            st.session_state._sam_proc_status = "running"
 
-        if st.button("🤖 Run SAM", use_container_width=True, disabled=not sam_ready):
-            if not tile_path.exists():
-                st.error("Download the tile first!")
-            else:
-                st.session_state._sam_proc_status = "running"
-                st.session_state._sam_proc_city   = city_key
+            def _sam(tp=str(tile_path), ck=city_key):
+                r = subprocess.run(
+                    [sys.executable, "sam2_segmentation.py", "--input", tp, "--city", ck],
+                    capture_output=True, text=True, cwd=Path(__file__).parent
+                )
+                st.session_state._sam_proc_log    = r.stdout + r.stderr
+                st.session_state._sam_proc_status = "done" if r.returncode == 0 else "error"
 
-                def _run_sam():
-                    r = subprocess.run(
-                        [sys.executable, "sam2_segmentation.py",
-                         "--input", str(tile_path),
-                         "--city",  city_key],
-                        capture_output=True, text=True, cwd=Path(__file__).parent
-                    )
-                    st.session_state._sam_proc_log    = r.stdout + r.stderr
-                    st.session_state._sam_proc_status = "done" if r.returncode == 0 else "error"
+            t = threading.Thread(target=_sam, daemon=True)
+            t.start()
+            st.session_state._sam_proc_thread = t
+            st.rerun()
 
-                t = threading.Thread(target=_run_sam, daemon=True)
-                t.start()
-                st.session_state._sam_proc_thread = t
+        # Show results preview in col2
+        summary = Path("results/bangalore_sam2_summary.png")
+        if summary.exists():
+            st.image(str(summary), caption="3-Panel: RGB → SAM → Classes", width='stretch')
+        else:
+            st.markdown(
+                '<div style="border:1px dashed rgba(125,211,252,0.25);border-radius:12px;'
+                'padding:40px;text-align:center;color:#475569">'
+                '🤖 No segmentation yet.<br>Download tile → Run SAM.</div>',
+                unsafe_allow_html=True
+            )
 
-        # Status display
-        status = st.session_state._sam_proc_status
-        if status == "running":
-            st.warning("⏳ SAM running in background (~2 min). Switch tabs freely. Click **Check Status** when ready.")
-            if st.button("🔄 Check SAM Status", key="sam_check"):
-                if not st.session_state._sam_proc_thread.is_alive():
-                    st.session_state._sam_proc_status = "done"
-                    st.rerun()
-                else:
-                    st.info("Still running…")
-        elif status == "done":
-            st.success("✅ SAM segmentation complete!")
-        elif status == "error":
-            st.error("SAM failed — falling back to spectral classification results below.")
-            with st.expander("Error log"):
-                st.code(st.session_state._sam_proc_log[-1000:])
-
-    # ── Results ──────────────────────────────────────────────────────────────
+    # ── Results gallery ───────────────────────────────────────────────────────
     st.divider()
-    st.markdown("### Segmentation Results")
-    sam_files = {
-        f"results/bangalore_sam2_summary.png":       "3-Panel: RGB → SAM Segments → Land Cover",
-        f"results/bangalore_class_overlay.png":      "Land cover classes on satellite",
-        f"results/bangalore_classification_map.png": "Pure classification map",
-        f"results/bangalore_class_overlay_fallback.png":"Spectral-only fallback (no SAM)",
+    st.markdown("### 📊 All Segmentation Outputs")
+    sam_result_files = {
+        "results/bangalore_sam2_summary.png":            "3-Panel: RGB → SAM Segments → Land Cover",
+        "results/bangalore_class_overlay.png":           "Land cover classes on satellite image",
+        "results/bangalore_classification_map.png":      "Pure classification map",
+        "results/bangalore_class_overlay_fallback.png":  "Spectral fallback classification",
     }
     any_shown = False
-    for fpath, cap in sam_files.items():
+    for fpath, cap in sam_result_files.items():
         p = Path(fpath)
         if p.exists():
             any_shown = True
-            st.image(str(p), caption=cap, use_container_width=True)
+            with st.expander(f"📊 {cap}", expanded=False):
+                st.image(str(p), width='stretch')
 
-    stats_path = Path("results/bangalore_class_stats.json")
-    if not stats_path.exists():
-        stats_path = Path("results/bangalore_class_stats_fallback.json")
-    if stats_path.exists():
-        with open(stats_path) as f:
-            stats_data = json.load(f)
-        st.markdown("#### Area Statistics")
-        try:
-            cols = st.columns(len(stats_data))
-            for i, (cls, s) in enumerate(stats_data.items()):
-                cols[i].metric(cls, f"{s['area_sq_km']:.2f} km²", f"{s['percentage']:.1f}%")
-        except Exception:
-            st.json(stats_data)
+    for sp in [Path("results/bangalore_class_stats.json"),
+               Path("results/bangalore_class_stats_fallback.json")]:
+        if sp.exists():
+            with open(sp) as f:
+                sd = json.load(f)
+            st.markdown("#### Area Statistics")
+            try:
+                sc = st.columns(len(sd))
+                for i, (cls, s) in enumerate(sd.items()):
+                    sc[i].metric(cls, f"{s['area_sq_km']:.2f} km²", f"{s['percentage']:.1f}%")
+            except Exception:
+                st.json(sd)
+            break
 
     if not any_shown:
-        st.info("No results yet — complete Step 1 and Step 2 above.")
+        st.info("No results yet — complete Step 1 then Step 2 above.")
+
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE: RESULTS GALLERY
@@ -567,7 +668,7 @@ elif page == "📁 Results Gallery":
             desc = descriptions.get(name, "Generated output image")
             with st.expander(f"📊 **{name}** — {desc}", expanded="sam2_summary" in name or "change_detection" in name):
                 img = Image.open(img_path)
-                st.image(img, use_container_width=True)
+                st.image(img, width='stretch')
                 col1, col2 = st.columns([4, 1])
                 with col1:
                     st.caption(f"📁 `results/{name}` · {img.size[0]}×{img.size[1]}px · {img_path.stat().st_size/1024:.0f} KB")
