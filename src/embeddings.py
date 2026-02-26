@@ -6,7 +6,7 @@ satellite imagery and run server-side analysis over Bengaluru.
 
 NOTE on AlphaEarth Foundations:
     AlphaEarth Foundation Model embeddings are a Google DeepMind product
-    integrated into Earth Engine. As of early 2025, the public GEE dataset
+    integrated into Earth Engine. As of early 2026, the public GEE dataset
     collection ID is not yet finalized/available for academic accounts.
     This module is built ready to integrate AlphaEarth the moment the
     collection becomes available. Until then, we use Sentinel-2 L2A bands
@@ -97,7 +97,7 @@ def fetch_alpha_earth_patch(roi: ee.Geometry, start_date: str, end_date: str):
     but trained on satellite data). These embeddings capture land-cover semantics that
     raw spectral indices cannot — enabling zero-shot classification and retrieval.
 
-    Status: NOT YET AVAILABLE in public Earth Engine datasets (as of Feb 2025).
+    Status: NOT YET AVAILABLE in public Earth Engine datasets (as of Feb 2026).
     This function will be implemented once the dataset collection ID is published.
 
     Expected usage (once available):

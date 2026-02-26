@@ -1,22 +1,37 @@
 """
 sam2_segmentation.py
 
-Runs Meta's SAM 2 (via samgeo) on the downloaded Bengaluru satellite patch,
+Runs Meta's SAM 2 (via samgeo) on a downloaded satellite patch,
 classifies each segment by land-cover type using spectral indices,
-and exports an annotated class map + overlay visualization.
+and exports an annotated class map, overlay visualization and stats JSON.
 
-Pre-requisite: Run download_tile.py first to get data/bangalore_patch/bangalore_rgb.png
+Usage:
+    python sam2_segmentation.py                          # Bengaluru (default)
+    python sam2_segmentation.py --city Mumbai
+    python sam2_segmentation.py --input data/mumbai_patch/mumbai_rgb.png --city Mumbai
 """
 
 import os
 import sys
 import logging
+import argparse
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
 from PIL import Image
+
+# ── CLI args ──────────────────────────────────────────────────────────────────
+parser = argparse.ArgumentParser()
+parser.add_argument("--city",  default="Bengaluru",
+                    help="City name, e.g. Mumbai (used for output filenames)")
+parser.add_argument("--input", default=None,
+                    help="Path to RGB PNG. Defaults to data/<slug>_patch/<slug>_rgb.png")
+args = parser.parse_args()
+
+CITY  = args.city
+SLUG  = CITY.lower()
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -33,16 +48,18 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-PATCH_DIR  = Path("data/bangalore_patch")
-RGB_PNG    = PATCH_DIR / "bangalore_rgb.png"
-OUT_DIR    = Path("results")
+if args.input:
+    RGB_PNG = Path(args.input)
+else:
+    RGB_PNG = Path(f"data/{SLUG}_patch/{SLUG}_rgb.png")
+OUT_DIR = Path("results")
 OUT_DIR.mkdir(exist_ok=True)
 
 
 # ── 1. Load RGB image ─────────────────────────────────────────────────────────
 if not RGB_PNG.exists():
     logger.error(f"RGB patch not found: {RGB_PNG}")
-    logger.error("Please run:  python download_tile.py  first!")
+    logger.error(f"Please run:  python download_tile.py --city {CITY}  first!")
     sys.exit(1)
 
 logger.info(f"Loading satellite patch: {RGB_PNG}")
@@ -106,13 +123,13 @@ try:
         rgb_image=rgb_arr,
         class_map=class_map,
         alpha=0.45,
-        output_path=str(OUT_DIR / "bangalore_class_overlay.png")
+        output_path=str(OUT_DIR / f"{SLUG}_class_overlay.png")
     )
 
-    plot_classification_map(class_map, out_path=str(OUT_DIR / "bangalore_classification_map.png"))
+    plot_classification_map(class_map, out_path=str(OUT_DIR / f"{SLUG}_classification_map.png"))
 
-    stats = generate_class_area_report(class_map, pixel_resolution_m=3.0)  # ~3m/px at 2048px for 6km
-    save_stats_json(stats, str(OUT_DIR / "bangalore_class_stats.json"))
+    stats = generate_class_area_report(class_map, pixel_resolution_m=3.0)
+    save_stats_json(stats, str(OUT_DIR / f"{SLUG}_class_stats.json"))
 
     # ── 6. Summary Figure ─────────────────────────────────────────────────────
     fig, axes = plt.subplots(1, 3, figsize=(18, 6), facecolor="#0f1117")
@@ -129,10 +146,10 @@ try:
     fig.legend(handles=legend_handles, loc="lower center", ncol=len(legend_handles),
                facecolor="#1a1d27", labelcolor="white", fontsize=10, framealpha=0.8)
 
-    fig.suptitle("GeoSight — SAM 2 Land Cover Segmentation | Bengaluru, India",
+    fig.suptitle(f"GeoSight — SAM 2 Land Cover Segmentation | {CITY}, India",
                  color="white", fontsize=13, fontweight="bold", y=1.01)
     plt.tight_layout()
-    out_summary = str(OUT_DIR / "bangalore_sam2_summary.png")
+    out_summary = str(OUT_DIR / f"{SLUG}_sam2_summary.png")
     plt.savefig(out_summary, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
     plt.close()
 
@@ -142,8 +159,8 @@ try:
     for cls, s in stats.items():
         logger.info(f"  {cls:12s}: {s['area_sq_km']:6.2f} km²  ({s['percentage']:5.1f}%)")
     logger.info(f"\n  📊 Summary: {out_summary}")
-    logger.info(f"  🗺️  Overlay: {OUT_DIR}/bangalore_class_overlay.png")
-    logger.info(f"  📋 Stats:   {OUT_DIR}/bangalore_class_stats.json")
+    logger.info(f"  🗺️  Overlay: {OUT_DIR}/{SLUG}_class_overlay.png")
+    logger.info(f"  📋 Stats:   {OUT_DIR}/{SLUG}_class_stats.json")
 
 except Exception as e:
     logger.error(f"SAM 2 run failed: {e}")
@@ -160,11 +177,11 @@ except Exception as e:
         rgb_image=rgb_arr,
         class_map=class_map_fallback,
         alpha=0.45,
-        output_path=str(OUT_DIR / "bangalore_class_overlay_fallback.png")
+        output_path=str(OUT_DIR / f"{SLUG}_class_overlay_fallback.png")
     )
-    plot_classification_map(class_map_fallback, out_path=str(OUT_DIR / "bangalore_classification_fallback.png"))
+    plot_classification_map(class_map_fallback, out_path=str(OUT_DIR / f"{SLUG}_classification_fallback.png"))
     stats_fb = generate_class_area_report(class_map_fallback, pixel_resolution_m=3.0)
-    save_stats_json(stats_fb, str(OUT_DIR / "bangalore_class_stats_fallback.json"))
+    save_stats_json(stats_fb, str(OUT_DIR / f"{SLUG}_class_stats_fallback.json"))
 
     logger.info("✅ Fallback spectral classification complete.")
     for cls, s in stats_fb.items():
